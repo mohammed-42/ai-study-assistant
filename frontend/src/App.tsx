@@ -8,6 +8,8 @@ import Register from '@/pages/Register'
 import Dashboard from '@/pages/Dashboard'
 import Subjects from '@/pages/Subjects'
 import SubjectDetail from '@/pages/SubjectDetail'
+import Documents from '@/pages/Documents'
+import DocumentDetail from '@/pages/DocumentDetail'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +54,8 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="subjects" element={<Subjects />} />
               <Route path="subjects/:id" element={<SubjectDetail />} />
+              <Route path="documents" element={<Documents />} />
+              <Route path="documents/:id" element={<DocumentDetail />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
