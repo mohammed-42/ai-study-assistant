@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: asa_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: asa_user
+      POSTGRES_PASSWORD: asa_pass
+      POSTGRES_DB: ai_study_assistant
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asa_user -d ai_study_assistant"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
