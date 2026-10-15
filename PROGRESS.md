@@ -34,8 +34,8 @@
 - [x] Frontend build passes (`npm run build` clean)
 - [x] First git commit: `feat: Phase 1 — Foundation complete`
 
-### Phase 2 — Documents ✅ DONE (1 commit)
-**All items complete. Committed as `feat: Phase 2 — Documents` (6e8db95).**
+### Phase 2 — Documents ✅ DONE (2 commits)
+**All items complete. Committed as `feat: Phase 2 — Documents` (6e8db95) and `feat: Phase 2 frontend documents pages` (09c7b3b).**
 
 - [x] Add `documents`, `document_pages`, `document_chunks`, `processing_jobs` models + Alembic migration
 - [x] Supabase Storage bucket setup docs (signed URLs for upload/download) — documented in README stub
@@ -47,17 +47,16 @@
 - [x] Embedding call + pgvector insert (stub — placeholder embeddings)
 - [x] Document status transitions: `uploaded → processing → ready | failed`
 - [x] Delete endpoint (storage object + chunks + embeddings + metadata, tolerate partial failure)
-- [ ] Frontend: documents list page (paginated, filter by subject), document detail, status display, retry failed
+- [x] Frontend: documents list page (paginated, filter by subject), document detail, status display, retry failed
 - [x] Tests: upload validation, chunking, idempotent re-run, deletion cleanup — **14 tests passing**
 - [x] Update PROGRESS.md, commit
 
 **Backend tests: 22/22 passing** (8 subjects + 14 documents)
+**Frontend: TypeScript clean, build passes**
 
 **Known limitations:**
 - PyMuPDF import deferred (DLL policy blocks on this machine); chunking logic tested standalone
 - Embeddings are placeholder zeros until Gemini SDK integrated
-- Frontend document pages not yet built
-- [ ] Update PROGRESS.md, commit
 
 ---
 
