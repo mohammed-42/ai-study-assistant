@@ -1,15 +1,17 @@
 # AI Study Assistant — PROGRESS.md
 
 ## Current state
-- **Phase in progress:** 1 — Foundation
-- **Phase status:** Most of Phase 1 done; frontend build has one remaining import-path bug to fix before stopping cleanly
+- **Phase in progress:** 1 — Foundation (COMMITTED)
+- **Phase status:** Phase 1 fully complete and committed; no additional work started since last session
 - **Last updated:** 2026-10-15
 
 ---
 
 ## Phase checklist
 
-### Phase 1 — Foundation (NEARLY COMPLETE)
+### Phase 1 — Foundation ✅ DONE (1 commit)
+**All items complete. Committed as `feat: Phase 1 — Foundation complete` (1d9dcc0).**
+
 - [x] Repo initialized, .gitignore, README stub
 - [x] `docker-compose.yml` (Postgres + pgvector)
 - [x] Backend scaffold (FastAPI, Pydantic v2, SQLAlchemy 2.x, Alembic)
@@ -29,8 +31,24 @@
 - [x] Subject detail page
 - [x] MainLayout with sidebar navigation
 - [x] TypeScript compiles clean (`tsc --noEmit` passes)
-- [ ] **Frontend build** — blocked on one runtime import-path bug (see Known Issues)
-- [ ] Start new session to fix build + finalise
+- [x] Frontend build passes (`npm run build` clean)
+- [x] First git commit: `feat: Phase 1 — Foundation complete`
+
+### Phase 2 — Documents (NOT STARTED — 0% complete)
+
+- [ ] Add `documents`, `document_pages`, `document_chunks`, `processing_jobs` models + Alembic migration
+- [ ] Supabase Storage bucket setup docs (signed URLs for upload/download)
+- [ ] File upload endpoint with validation (PDF magic bytes, image decode via Pillow, size/page/dimension limits)
+- [ ] Multi-image upload as single document (ordered pages)
+- [ ] `processing_jobs` table + background task dispatch
+- [ ] PyMuPDF text extraction (text-layer pages)
+- [ ] Chunking logic (token-aware, ~800 tokens, ~120 overlap, page_start/page_end)
+- [ ] Embedding call + pgvector insert (idempotent — no duplicate chunks)
+- [ ] Document status transitions: `uploaded → processing → ready | failed`
+- [ ] Delete endpoint (storage object + chunks + embeddings + metadata, tolerate partial failure)
+- [ ] Frontend: documents list page (paginated, filter by subject), document detail, status display, retry failed
+- [ ] Tests: upload validation, chunking, idempotent re-run, deletion cleanup
+- [ ] Update PROGRESS.md, commit
 
 ---
 
@@ -171,23 +189,37 @@ ai-study-assistant/
 
 ## Known issues
 
-1. **Frontend build blocked** — `@/components/ui/toast` resolves at TS level (`tsc --noEmit` passes) but Vite/Rollup fails at runtime: the re-export file `src/components/ui/toast.tsx` imports `./use-toast` (relative) but the source is at `hooks/use-toast.tsx`. The fix is to change the re-export path to `@/hooks/use-toast`. **This is the last thing to fix before Phase 1 is fully done.**
+1. ~~**Frontend build blocked**~~ — **FIXED.** Added `resolve.alias` in `vite.config.ts` with `@types/node`. Build and `tsc --noEmit` both pass.
 
 2. **Docker unavailable** on this machine — dev DB defaults to SQLite in-memory for tests, file-based SQLite for live dev. Migration SQL generated correctly for Postgres+pgvector; will need Postgres running for production integration.
 
-3. **No git commits yet** — repo initialised but nothing committed. First commit should go in next session after build is fixed.
+3. **No live smoke test possible** — requires real Supabase project + Gemini API key. Script documented in README once Phase 1 complete.
 
-4. **No live smoke test possible** — requires real Supabase project + Gemini API key. Script documented in README once Phase 1 complete.
+4. **Pydantic v2 `ConfigDict` migration** — `app/core/config.py` uses deprecated class-based `config`. Cosmetic; does not affect functionality. Will fix before Phase 2 starts.
+
+5. **FastAPI `on_event` deprecation** — `main.py` uses `@app.on_event("startup")`. Works but should migrate to `lifespan` handler before Phase 2 to keep code clean.
 
 ---
 
 ## Commits
-*(none yet)*
+
+- `feat: Phase 1 — Foundation complete` (1d9dcc0) — repo scaffold, docker-compose, config validation, models + Alembic migration, health check, Supabase Auth token verification middleware, subjects CRUD (backend + frontend), protected routing, dashboard shell, 8 backend tests passing, frontend build clean.
 
 ---
 
-## Next session priority
-1. Fix `src/components/ui/toast.tsx` import path → `@/hooks/use-toast`
-2. Confirm `npm run build` passes
-3. First git commit with full Phase 1 state
-4. Update PROGRESS.md → Phase 1 DONE, start Phase 2 (Documents)
+## Phase 2 — Documents (next)
+
+Todo for Phase 2:
+- [ ] Add `documents`, `document_pages`, `document_chunks`, `processing_jobs` models + Alembic migration
+- [ ] Supabase Storage bucket setup docs (signed URLs for upload/download)
+- [ ] File upload endpoint with validation (PDF magic bytes, image decode via Pillow, size/page/dimension limits)
+- [ ] Multi-image upload as single document (ordered pages)
+- [ ] `processing_jobs` table + background task dispatch
+- [ ] PyMuPDF text extraction (text-layer pages)
+- [ ] Chunking logic (token-aware, ~800 tokens, ~120 overlap, page_start/page_end)
+- [ ] Embedding call + pgvector insert (idempotent — no duplicate chunks)
+- [ ] Document status transitions: `uploaded → processing → ready | failed`
+- [ ] Delete endpoint (storage object + chunks + embeddings + metadata, tolerate partial failure)
+- [ ] Frontend: documents list page (paginated, filter by subject), document detail, status display, retry failed
+- [ ] Tests: upload validation, chunking, idempotent re-run, deletion cleanup
+- [ ] Update PROGRESS.md, commit
