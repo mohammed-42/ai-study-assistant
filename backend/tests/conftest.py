@@ -12,6 +12,10 @@ os.environ["GEMINI_API_KEY"] = "test-gemini-key"
 from app.db.base import Base, reset_db_for_testing  # noqa: E402
 from app.models.profile import Profile  # noqa: E402
 from app.models.subject import Subject  # noqa: E402
+from app.models.document import Document  # noqa: E402
+from app.models.document_page import DocumentPage  # noqa: E402
+from app.models.document_chunk import DocumentChunk  # noqa: E402
+from app.models.processing_job import ProcessingJob  # noqa: E402
 
 
 @pytest.fixture

@@ -14,6 +14,10 @@ if config.config_file_name is not None:
 from app.db.base import Base  # noqa: E402
 from app.models.profile import Profile  # noqa: E402
 from app.models.subject import Subject  # noqa: E402
+from app.models.document import Document  # noqa: E402
+from app.models.document_page import DocumentPage  # noqa: E402
+from app.models.document_chunk import DocumentChunk  # noqa: E402
+from app.models.processing_job import ProcessingJob  # noqa: E402
 
 target_metadata = Base.metadata
 

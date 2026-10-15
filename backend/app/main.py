@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health_router, subjects_router
+from app.api import health_router, subjects_router, documents_router, upload_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -21,6 +21,8 @@ app.add_middleware(
 
 app.include_router(health_router, prefix="/api")
 app.include_router(subjects_router, prefix="/api")
+app.include_router(documents_router, prefix="/api")
+app.include_router(upload_router, prefix="/api")
 
 
 @app.on_event("startup")
