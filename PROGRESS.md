@@ -71,8 +71,8 @@
 
 ---
 
-### Phase 3 — OCR (NOT STARTED)
-Begin only on explicit user instruction.
+### Phase 3 — OCR (NOT STARTED — no work completed)
+No Phase 3 work was initiated. Phase 3 remains pending and will begin only on explicit user instruction.
 
 Planned:
 - [ ] `OcrProvider` interface (`transcribe_page(image_bytes) -> text + flags`)
@@ -80,10 +80,11 @@ Planned:
 - [ ] Optional Tesseract fallback for printed text only
 - [ ] Per-page review/edit UI with re-embedding on edit
 - [ ] OCR limits (pages per doc, pages per user per day)
-- [ ] `needs_review` flagging logic
+- [ ] `needs_review` flagging logic (short output, `[illegible]` markers, low-quality signal)
 - [ ] Multi-image upload as single document (ordered pages)
 - [ ] Scanned-PDF page rendering at ~200 DPI
-- [ ] Tests for OCR path selection, response handling, flagging
+- [ ] Tests: OCR path selection, prompt/response handling, flagging, resume-from-failed-page
+- [ ] Update README with OCR accuracy disclaimer and privacy notice
 
 ---
 
