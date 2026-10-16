@@ -54,9 +54,9 @@
 
 **Known stubs and limitations in Phase 2:**
 - **PyMuPDF text extraction is deferred/limited** — DLL load blocked by Windows Application Control policy on this machine; `fitz` is imported lazily and will fail at runtime if a real PDF is processed. The chunking logic itself (pure Python) is tested and works.
-- **Gemini embeddings and pgvector insertion are placeholders** — `embedding` column stores zeros until the Gemini SDK is wired up in Phase 3 or later.
-- **OCR has not started** — no `OcrProvider` interface or Gemini vision integration exists yet.
-- **Supabase Storage not wired** — upload endpoint accepts files but does not persist to cloud storage (no signed URLs yet).
+- ~~**Gemini embeddings and pgvector insertion are placeholders**~~ — `embed_texts()` wired in Phase 3; populates when `GEMINI_API_KEY` is set.
+- ~~**OCR has not started**~~ — Completed in Phase 3.
+- **Supabase Storage not wired** — upload endpoint accepts files but does not persist to cloud storage (no signed URLs yet). Deferred to Phase 4.
 
 **Frontend (completed):**
 - [x] Types: `AppDocument`, `DocumentPage`, `DocumentChunk`, `DocumentStatus`
@@ -304,3 +304,16 @@ ai-study-assistant/
 ---
 
 ## Phase 4 — Tutor (pending)
+
+Planned:
+- [ ] RAG retrieval endpoint: vector search restricted to caller's documents + subject filters
+- [ ] Configurable top-k and minimum similarity threshold
+- [ ] Grounded answer generation via Gemini (question + retrieved chunks with citations)
+- [ ] Citation validation: verify referenced chunk IDs exist, resolve document name + page
+- [ ] Structured output: answer text + citations, reject invalid references
+- [ ] Insufficient-evidence path: explicit "materials don't cover this" message
+- [ ] Chat persistence: sessions + messages in Postgres
+- [ ] Follow-up questions using conversation history + fresh retrieval
+- [ ] Frontend tutor page with chat UI, citation display, loading states
+- [ ] Tests: retrieval authorization, citation validation, insufficient evidence, chat CRUD
+- [ ] Update PROGRESS.md, commit
