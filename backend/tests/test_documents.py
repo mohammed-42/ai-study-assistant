@@ -45,7 +45,7 @@ async def test_create_document(db_session, test_user, test_subject, client):
     """Test creating a document via upload."""
     response = client.post(
         "/api/documents/upload",
-        files={"file": ("Test.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("Test.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     assert response.status_code == 201
@@ -60,7 +60,7 @@ async def test_get_document(db_session, test_user, test_subject, client):
     """Test getting a single document."""
     create_resp = client.post(
         "/api/documents/upload",
-        files={"file": ("Math Notes.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("Math Notes.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     doc_id = create_resp.json()["id"]
@@ -77,12 +77,12 @@ async def test_list_documents_by_subject(db_session, test_user, test_subject, cl
     # Create two documents for same subject
     client.post(
         "/api/documents/upload",
-        files={"file": ("Doc1.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("Doc1.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     client.post(
         "/api/documents/upload",
-        files={"file": ("Doc2.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("Doc2.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
 
@@ -97,7 +97,7 @@ async def test_delete_document(db_session, test_user, test_subject, client):
     """Test deleting a document."""
     create_resp = client.post(
         "/api/documents/upload",
-        files={"file": ("ToDelete.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("ToDelete.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     doc_id = create_resp.json()["id"]
@@ -116,7 +116,7 @@ async def test_document_ownership_isolation(db_session, test_user, test_subject,
     # Create document
     create_resp = client.post(
         "/api/documents/upload",
-        files={"file": ("MyDoc.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("MyDoc.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     doc_id = create_resp.json()["id"]
@@ -154,7 +154,7 @@ async def test_list_document_pages(db_session, test_user, test_subject, client):
     # Create document
     create_resp = client.post(
         "/api/documents/upload",
-        files={"file": ("Test.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("Test.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     doc_id = create_resp.json()["id"]
@@ -184,7 +184,7 @@ async def test_list_document_chunks(db_session, test_user, test_subject, client)
     # Create document
     create_resp = client.post(
         "/api/documents/upload",
-        files={"file": ("Test.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("Test.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     doc_id = create_resp.json()["id"]
@@ -214,7 +214,7 @@ async def test_retry_failed_document(db_session, test_user, test_subject, client
     # Create and fail document
     create_resp = client.post(
         "/api/documents/upload",
-        files={"file": ("Failed.pdf", io.BytesIO(b"%PDF-1.4 test"))},
+        files={"files": ("Failed.pdf", io.BytesIO(b"%PDF-1.4 test"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     doc_id = create_resp.json()["id"]
@@ -263,7 +263,7 @@ async def test_upload_invalid_pdf(db_session, test_user, test_subject, client):
     """Test uploading an invalid PDF."""
     response = client.post(
         "/api/documents/upload",
-        files={"file": ("fake.pdf", io.BytesIO(b"not a real pdf"))},
+        files={"files": ("fake.pdf", io.BytesIO(b"not a real pdf"))},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     assert response.status_code == 400
@@ -276,7 +276,7 @@ async def test_upload_file_too_large(db_session, test_user, test_subject, client
     large_file = io.BytesIO(b"x" * (51 * 1024 * 1024))
     response = client.post(
         "/api/documents/upload",
-        files={"file": ("big.pdf", large_file)},
+        files={"files": ("big.pdf", large_file)},
         params={"subject_id": str(test_subject.id), "doc_type": "pdf"}
     )
     assert response.status_code == 413

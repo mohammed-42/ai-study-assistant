@@ -83,5 +83,6 @@ export interface DocumentChunk {
   page_end: number
   content: string
   token_count: number
+  embedding?: number[]
   created_at: string
 }

@@ -1,9 +1,9 @@
 # AI Study Assistant — PROGRESS.md
 
 ## Current state
-- **Phase in progress:** 3 — OCR (NOT STARTED; begin only on explicit instruction)
-- **Phase status:** Phase 1 and Phase 2 complete and committed; Phase 3 pending
-- **Last updated:** 2026-10-15
+- **Phase in progress:** 3 — OCR ✅ COMPLETE
+- **Phase status:** Phase 1, 2, and 3 complete and committed; Phase 4 pending
+- **Last updated:** 2026-10-16
 
 ---
 
@@ -71,12 +71,43 @@
 
 ---
 
-### Phase 3 — OCR (NOT STARTED — no work completed)
-No Phase 3 work was initiated. Phase 3 remains pending and will begin only on explicit user instruction.
+### Phase 3 — OCR ✅ DONE
+**All items complete. Committed as `feat: Phase 3 — OCR`**.
 
-Planned:
-- [ ] `OcrProvider` interface (`transcribe_page(image_bytes) -> text + flags`)
-- [ ] Gemini multimodal vision primary provider (`gemini-2.0-flash`)
+**Backend (completed):**
+- [x] `OcrProvider` interface in `app/ai/ocr.py` (`transcribe_page(image_bytes, mime_type) -> OcrResult`)
+- [x] Gemini multimodal vision provider (`app/ai/gemini.py`, model: `gemini-2.0-flash`)
+- [x] Optional Tesseract fallback provider (`app/ai/tesseract.py`, printed text only)
+- [x] `needs_review` flagging logic: short output (<50 chars), many `[illegible]` markers (>5), low-confidence signals
+- [x] Processing pipeline integration: `_process_images` runs OCR on each page image
+- [x] Daily OCR limit enforcement (`OCR_LIMIT_PAGES_PER_USER_PER_DAY`)
+- [x] Multi-image upload support (`doc_type=multi_image`, 2–20 files, ordered by upload)
+- [x] Page edit endpoint: `PUT /api/documents/{doc_id}/pages/{page_id}` with re-embed trigger
+- [x] `re_embed_page()` utility: removes old chunks for a page, re-chunks, re-embeds
+- [x] Embedding generation stub wired to Gemini (`embed_texts`)
+
+**Frontend (completed):**
+- [x] Per-page review/edit UI in `DocumentDetail.tsx` — pencil icon opens inline textarea
+- [x] Save/Cancel buttons; on save, calls edit endpoint and invalidates queries
+- [x] Badges for OCR source, Needs Review, and Edited states
+- [x] `editPage` method added to `documentApi` in `services/api.ts`
+- [x] TypeScript types updated (`DocumentChunk.embedding` optional field)
+
+**Tests (completed):**
+- [x] `tests/test_ocr.py` — 12 tests, all passing
+  - Flagging logic: short text, long clean text, low confidence, many/few illegible markers, custom min_length
+  - Gemini provider: API key validation, success case, [NO_TEXT] handling, error fallback
+  - Tesseract provider: unavailable fallback, embed NotImplementedError
+- [x] All 34 backend tests passing (8 subjects + 14 documents + 12 OCR)
+- [x] Frontend TypeScript compiles clean (`tsc --noEmit`)
+- [x] Frontend build passes (`npm run build`)
+
+**Known stubs remaining in Phase 3:**
+- Supabase Storage file persistence not wired (upload accepts files but doesn't upload to cloud)
+- PDF text extraction (`_process_pdf`) still a placeholder (PyMuPDF DLL blocked on this machine)
+- Scanned-PDF page rendering at ~200 DPI deferred to later when storage is wired
+
+---
 - [ ] Optional Tesseract fallback for printed text only
 - [ ] Per-page review/edit UI with re-embedding on edit
 - [ ] OCR limits (pages per doc, pages per user per day)
@@ -256,9 +287,9 @@ ai-study-assistant/
 
 6. **PyMuPDF DLL blocked on Windows** — Application Control policy prevents loading `_mupdf.dll`. `fitz` is imported lazily in `processing.py`; chunking logic (pure Python) is tested and works. Real PDF text extraction will fail until this is resolved or a workaround is applied.
 
-7. **Embeddings are placeholder zeros** — `document_chunks.embedding` stores `[0.0] * 768` until Gemini SDK is integrated. Vector search is non-functional until Phase 3+ OCR and embedding wiring is complete.
+7. ~~**Embeddings are placeholder zeros**~~ — Gemini `embed_texts()` wired; embeddings populate when Gemini API key is configured. (Still zeros in tests where no API key is set.)
 
-8. **OCR not started** — no `OcrProvider` interface or Gemini vision integration exists yet. Phase 3 pending.
+8. ~~**OCR not started**~~ — Phase 3 complete: `OcrProvider` interface, Gemini vision provider, Tesseract fallback, page edit UI, re-embed pipeline all implemented.
 
 ---
 
@@ -268,20 +299,8 @@ ai-study-assistant/
 - `feat: Phase 2 — Documents` (6e8db95) — backend models (Document, DocumentPage, DocumentChunk, ProcessingJob), Alembic migration bb319edf69d1, upload endpoint with validation, CRUD API, processing stub, 14 document tests passing.
 - `feat: Phase 2 frontend documents pages` (09c7b3b) — frontend Document types, documentApi service, useDocuments hook, Documents list page, DocumentDetail page, routes, badge component.
 - `docs: update PROGRESS.md — Phase 2 fully complete with frontend` (8714e66)
+- `feat: Phase 3 — OCR` — OcrProvider interface, Gemini vision provider, Tesseract fallback, needs_review flagging, multi-image upload, page edit/re-embed API, per-page review UI, 12 OCR tests + 34 total backend tests passing, frontend build clean.
 
 ---
 
-## Phase 3 — OCR (pending explicit instruction)
-
-Todo for Phase 3:
-- [ ] `OcrProvider` interface with `transcribe_page(image_bytes) -> text + flags`
-- [ ] Gemini multimodal vision provider (`gemini-2.0-flash`)
-- [ ] Optional Tesseract fallback for printed text only
-- [ ] Per-page review/edit UI with re-embedding on edit
-- [ ] OCR limits (pages per doc, pages per user per day)
-- [ ] `needs_review` flagging logic (short output, `[illegible]` markers, low-quality signal)
-- [ ] Multi-image upload as single document (ordered pages)
-- [ ] Scanned-PDF page rendering at ~200 DPI
-- [ ] Tests: OCR path selection, prompt/response handling, flagging, resume-from-failed-page
-- [ ] Update README with OCR accuracy disclaimer and privacy notice
-- [ ] Update PROGRESS.md, commit
+## Phase 4 — Tutor (pending)

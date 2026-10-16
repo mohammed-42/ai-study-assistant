@@ -55,4 +55,12 @@ export const documentApi = {
   },
   getPages: (id: string) => apiFetch<DocumentPage[]>(`/documents/${id}/pages`),
   getChunks: (id: string) => apiFetch<DocumentChunk[]>(`/documents/${id}/chunks`),
+  editPage: (docId: string, pageId: string, data: {
+    text: string
+    needs_review?: boolean
+    user_edited?: boolean
+  }) => apiFetch<DocumentPage>(`/documents/${docId}/pages/${pageId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
 }

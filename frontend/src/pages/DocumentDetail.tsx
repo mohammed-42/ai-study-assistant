@@ -1,15 +1,19 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { documentApi } from '@/services/api'
 import { DocumentPage, DocumentChunk } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, FileText, Upload } from 'lucide-react'
+import { AlertCircle, FileText, Upload, Pencil, Check, X } from 'lucide-react'
+import { useState } from 'react'
 
 export default function DocumentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [editingPageId, setEditingPageId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
 
   const { data: document, isLoading } = useQuery({
     queryKey: ['documents', id],
@@ -20,7 +24,7 @@ export default function DocumentDetail() {
   const { data: pages } = useQuery({
     queryKey: ['documents', id, 'pages'],
     queryFn: () => documentApi.getPages(id!),
-    enabled: !!id && document?.status === 'ready',
+    enabled: !!id,
   })
 
   const { data: chunks } = useQuery({
@@ -28,6 +32,33 @@ export default function DocumentDetail() {
     queryFn: () => documentApi.getChunks(id!),
     enabled: !!id && document?.status === 'ready',
   })
+
+  const editPageMutation = useMutation({
+    mutationFn: ({ pageId, text }: { pageId: string; text: string }) =>
+      documentApi.editPage(id!, pageId, { text, user_edited: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', id, 'pages'] })
+      queryClient.invalidateQueries({ queryKey: ['documents', id, 'chunks'] })
+      setEditingPageId(null)
+      setEditText('')
+    },
+  })
+
+  const startEdit = (page: DocumentPage) => {
+    setEditingPageId(page.id)
+    setEditText(page.text)
+  }
+
+  const cancelEdit = () => {
+    setEditingPageId(null)
+    setEditText('')
+  }
+
+  const saveEdit = () => {
+    if (editingPageId && editText !== null) {
+      editPageMutation.mutate({ pageId: editingPageId, text: editText })
+    }
+  }
 
   if (isLoading) {
     return (
@@ -84,23 +115,58 @@ export default function DocumentDetail() {
             Pages
           </h2>
           {pages && pages.length > 0 ? (
-            <div className="mt-2 space-y-2">
+            <div className="mt-2 space-y-3">
               {pages.map((page: DocumentPage) => (
-                <div key={page.id} className="rounded-md bg-muted p-3">
+                <div key={page.id} className="rounded-md border bg-card p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Page {page.page_number}</span>
                     <div className="flex gap-2">
                       {page.needs_review && (
-                        <Badge variant="outline">Needs Review</Badge>
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                          Needs Review
+                        </Badge>
                       )}
                       {page.source === 'ocr' && (
-                        <Badge variant="outline">OCR</Badge>
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                          OCR
+                        </Badge>
                       )}
+                      {page.user_edited && (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          Edited
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => startEdit(page)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                    {page.text || 'No text extracted'}
-                  </p>
+                  {editingPageId === page.id ? (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        className="w-full min-h-[100px] rounded-md border p-2 text-sm"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={saveEdit} disabled={editPageMutation.isPending}>
+                          <Check className="h-3 w-3 mr-1" /> Save
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={cancelEdit}>
+                          <X className="h-3 w-3 mr-1" /> Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
+                      {page.text || 'No text extracted'}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
