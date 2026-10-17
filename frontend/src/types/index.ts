@@ -86,3 +86,31 @@ export interface DocumentChunk {
   embedding?: number[]
   created_at: string
 }
+
+export interface ChatSession {
+  id: string
+  owner_id: string
+  subject_id: string | null
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant'
+  content: string
+  citation_ids: string[] | null
+  is_insufficient: boolean
+  created_at: string
+}
+
+export interface TutorRequest {
+  content: string
+  session_id?: string
+  subject_id?: string
+  document_ids?: string[]
+  top_k?: number
+  min_similarity?: number
+}

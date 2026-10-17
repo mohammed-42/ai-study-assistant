@@ -1,4 +1,4 @@
-import { AppDocument, DocumentPage, DocumentChunk } from '@/types'
+import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest } from '@/types'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -63,4 +63,18 @@ export const documentApi = {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
+}
+
+// Chat/Tutor APIs
+export const chatApi = {
+  listSessions: () => apiFetch<ChatSession[]>('/chat/sessions'),
+  createSession: (data: { subject_id?: string; title?: string }) => 
+    apiFetch<ChatSession>('/chat/sessions', { method: 'POST', body: JSON.stringify(data) }),
+  deleteSession: (id: string) => apiFetch<void>(`/chat/sessions/${id}`, { method: 'DELETE' }),
+  listMessages: (sessionId: string) => apiFetch<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`),
+  sendMessage: (sessionId: string, data: TutorRequest) => 
+    apiFetch<ChatMessage>(`/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 }

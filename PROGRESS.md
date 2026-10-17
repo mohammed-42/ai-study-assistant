@@ -1,9 +1,9 @@
 # AI Study Assistant — PROGRESS.md
 
 ## Current state
-- **Phase in progress:** 3 — OCR ✅ COMPLETE
-- **Phase status:** Phase 1, 2, and 3 complete and committed; Phase 4 pending
-- **Last updated:** 2026-10-16
+- **Phase in progress:** 4 — Tutor ✅ COMPLETE
+- **Phase status:** Phase 1, 2, 3, and 4 complete and committed; Phase 5 pending
+- **Last updated:** 2026-10-17
 
 ---
 
@@ -108,14 +108,47 @@
 - Scanned-PDF page rendering at ~200 DPI deferred to later when storage is wired
 
 ---
-- [ ] Optional Tesseract fallback for printed text only
-- [ ] Per-page review/edit UI with re-embedding on edit
-- [ ] OCR limits (pages per doc, pages per user per day)
-- [ ] `needs_review` flagging logic (short output, `[illegible]` markers, low-quality signal)
-- [ ] Multi-image upload as single document (ordered pages)
-- [ ] Scanned-PDF page rendering at ~200 DPI
-- [ ] Tests: OCR path selection, prompt/response handling, flagging, resume-from-failed-page
-- [ ] Update README with OCR accuracy disclaimer and privacy notice
+
+### Phase 4 — Tutor ✅ DONE
+**All items complete. Committed as `feat: Phase 4 — Tutor`**.
+
+**Backend (completed):**
+- [x] Chat session models: `ChatSession`, `ChatMessage` with proper foreign keys
+- [x] Alembic migration: `159f277202ec` (chat_sessions, chat_messages tables)
+- [x] RAG retrieval service (`app/rag/retriever.py`): vector search with pgvector, top-k, min similarity threshold, ownership filtering
+- [x] Answer generation service (`app/rag/generator.py`): Gemini grounded QA, citation validation, insufficient evidence path
+- [x] Chat API endpoints (`app/api/chat.py`):
+  - `GET /api/chat/sessions` — list sessions (owner-scoped)
+  - `POST /api/chat/sessions` — create session
+  - `DELETE /api/chat/sessions/{id}` — delete session with cascading messages
+  - `GET /api/chat/sessions/{id}/messages` — list messages
+  - `POST /api/chat/sessions/{id}/messages` — send message, get AI response
+- [x] Citation validation: verify referenced chunk IDs exist, resolve document name + page
+- [x] Insufficient evidence path: explicit "materials don't cover this" message
+- [x] Conversation history support for follow-up questions
+- [x] Tests: **12 new tests** (all passing)
+  - Session CRUD (list, create, delete, ownership isolation)
+  - Message listing
+  - Retrieval authorization (ownership filter)
+  - Citation validation
+  - Insufficient evidence path
+  - End-to-end answer generation with mocked Gemini
+
+**Frontend (completed):**
+- [x] Types: `ChatSession`, `ChatMessage`, `TutorRequest`
+- [x] Service: `chatApi` (listSessions, createSession, deleteSession, listMessages, sendMessage)
+- [x] Hooks: `useChatSessions`, `useChatMessages`, `useCreateChatSession`, `useDeleteChatSession`, `useSendChatMessage`
+- [x] Pages: `Tutor.tsx` (session list with create/delete), `TutorSession.tsx` (chat UI with citation display)
+- [x] Routes: `/tutor`, `/tutor/:sessionId` added to `App.tsx`
+- [x] Sidebar: Tutor link added to navigation
+- [x] TypeScript compiles clean (`tsc --noEmit` passes)
+- [x] Frontend build passes (`npm run build`)
+
+**Tests: 46/46 passing** (8 subjects + 14 documents + 12 OCR + 12 chat)
+
+---
+
+### Phase 5 — Notes + Quizzes (pending)
 
 ---
 
@@ -207,29 +240,39 @@ ai-study-assistant/
       core/config.py           # Settings (lazy-loaded, env-overridable)
       db/base.py               # Base, get_db, init_db, reset_db_for_testing
       models/
-        __init__.py            # Exports: Profile, Subject, Document, DocumentPage, DocumentChunk, ProcessingJob
+        __init__.py            # Exports: Profile, Subject, Document, DocumentPage, DocumentChunk, ProcessingJob, ChatSession, ChatMessage
         profile.py             # profiles table
         subject.py             # subjects table
         document.py            # documents table
         document_page.py       # document_pages table
         document_chunk.py      # document_chunks table (with pgvector Vector column)
         processing_job.py      # processing_jobs table
+        chat_session.py        # chat_sessions table
+        chat_message.py        # chat_messages table
       schemas/
         subject.py             # SubjectCreate, SubjectOut, SubjectUpdate
         document.py            # DocumentOut, DocumentPageOut, DocumentChunkOut
+        chat.py                # ChatSessionOut, ChatMessageOut, MessageCreate
       api/
-        __init__.py            # health_router, subjects_router, documents_router, upload_router
+        __init__.py            # health_router, subjects_router, documents_router, upload_router, pages_router, chat_router
         deps.py                # get_current_user (Supabase JWT verify via JWKS)
         health.py              # GET /api/health
         subjects.py            # CRUD /api/subjects (owner-scoped)
         documents.py           # GET/DELETE/retry documents, pages, chunks
         upload.py              # POST /api/documents/upload (file validation)
+        chat.py                # Chat sessions and messages CRUD
+      rag/
+        __init__.py            # RAG service exports
+        retriever.py           # Vector search with pgvector, ownership filtering
+        generator.py           # Gemini grounded QA with citation validation
       services/
         processing.py          # Chunking logic (tested), processing pipeline stub (PyMuPDF lazy, embedding placeholder)
       tests/
         conftest.py            # in-memory SQLite fixtures, env overrides
         test_subjects.py       # 8 tests, all passing
         test_documents.py      # 14 tests, all passing
+        test_ocr.py            # 12 tests, all passing
+        test_chat.py           # 12 tests, all passing
     alembic/
       env.py                   # Sync engine for migrations
       ini                      # points at SQLite for dev
@@ -250,6 +293,7 @@ ai-study-assistant/
         use-auth.tsx           # AuthContext (Supabase client)
         use-toast.tsx          # Toast hook + Toaster component
         use-documents.ts       # useDocuments, useDeleteDocument, useRetryDocument, useUploadDocument
+        use-chat.ts            # useChatSessions, useChatMessages, useCreateChatSession, useDeleteChatSession, useSendChatMessage
       layouts/MainLayout.tsx   # Sidebar + header + Outlet
       pages/
         Login.tsx
@@ -259,9 +303,11 @@ ai-study-assistant/
         SubjectDetail.tsx
         Documents.tsx          # document list table with status badges
         DocumentDetail.tsx     # pages and chunks display
+        Tutor.tsx              # Chat session list page
+        TutorSession.tsx       # Chat UI with message display and citation badges
       services/
         supabase.ts            # createSupabaseClient
-        api.ts                 # apiFetch wrapper + documentApi (list/get/upload/delete/retry/pages/chunks)
+        api.ts                 # apiFetch wrapper + documentApi + chatApi
       components/ui/           # shadcn components (17 components including badge)
     package.json
     vite.config.ts
@@ -300,6 +346,7 @@ ai-study-assistant/
 - `feat: Phase 2 frontend documents pages` (09c7b3b) — frontend Document types, documentApi service, useDocuments hook, Documents list page, DocumentDetail page, routes, badge component.
 - `docs: update PROGRESS.md — Phase 2 fully complete with frontend` (8714e66)
 - `feat: Phase 3 — OCR` — OcrProvider interface, Gemini vision provider, Tesseract fallback, needs_review flagging, multi-image upload, page edit/re-embed API, per-page review UI, 12 OCR tests + 34 total backend tests passing, frontend build clean.
+- `feat: Phase 4 — Tutor` — RAG retrieval service, Gemini grounded QA with citation validation, chat sessions/messages API, frontend tutor pages with chat UI, 12 new tests, 46 total backend tests passing, frontend build clean.
 
 ---
 

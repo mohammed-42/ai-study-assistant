@@ -104,7 +104,7 @@ Page images are sent to the Gemini API for transcription. This is documented for
 - ✅ Phase 1: Foundation (repo, docker, config, models, auth, subjects CRUD)
 - ✅ Phase 2: Documents (upload, validation, CRUD, chunking)
 - ✅ Phase 3: OCR (Gemini vision provider, Tesseract fallback, page review/edit UI)
-- ⏳ Phase 4: Tutor (RAG, grounded answers, citations)
+- ⏳ Phase 4: Tutor (RAG, grounded answers, citations) ✅ COMPLETE
 - ⏳ Phase 5: Notes + Quizzes
 - ⏳ Phase 6: Study Planner + Dashboard
 - ⏳ Phase 7: Hardening

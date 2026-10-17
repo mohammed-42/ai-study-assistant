@@ -12,7 +12,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { BookOpen, LayoutDashboard, LogOut, Folder } from 'lucide-react'
+import { BookOpen, LayoutDashboard, LogOut, Folder, MessageSquare } from 'lucide-react'
 
 export default function Layout() {
   const { user, signOut } = useAuth()
@@ -45,6 +45,14 @@ export default function Layout() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Tutor">
+                  <Link to="/tutor" className="flex items-center gap-3">
+                    <MessageSquare className="h-4 w-4" />
+                    <span>Tutor</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Subjects">
                   <Link to="/subjects" className="flex items-center gap-3">
                     <Folder className="h-4 w-4" />
@@ -70,6 +78,7 @@ export default function Layout() {
             <SidebarTrigger />
             <h1 className="text-lg font-semibold">
               {location.pathname === '/' ? 'Dashboard' :
+               location.pathname === '/tutor' ? 'AI Tutor' :
                location.pathname === '/subjects' ? 'Subjects' :
                location.pathname.startsWith('/subjects/') ? 'Subject Details' : ''}
             </h1>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health_router, subjects_router, documents_router, upload_router, pages_router
+from app.api import health_router, subjects_router, documents_router, upload_router, pages_router, chat_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -24,6 +24,7 @@ app.include_router(subjects_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(upload_router, prefix="/api")
 app.include_router(pages_router, prefix="/api")
+app.include_router(chat_router)
 
 
 @app.on_event("startup")

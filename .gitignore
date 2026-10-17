@@ -29,6 +29,7 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.smoke
 
 # IDE
 .idea/
@@ -55,3 +56,4 @@ alembic/versions/*.py
 # Misc
 *.tmp
 *.bak
+.backend/samples/
