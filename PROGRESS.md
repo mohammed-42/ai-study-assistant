@@ -1,9 +1,9 @@
 # AI Study Assistant — PROGRESS.md
 
 ## Current state
-- **Phase in progress:** 4 — Tutor ✅ COMPLETE
-- **Phase status:** Phase 1, 2, 3, and 4 complete and committed; Phase 5 pending
-- **Last updated:** 2026-10-17
+- **Phase in progress:** 5 — Notes + Quizzes ✅ COMPLETE
+- **Phase status:** Phases 1–5 complete and committed; Phase 6 pending
+- **Last updated:** 2026-10-18
 
 ---
 
@@ -148,7 +148,43 @@
 
 ---
 
-### Phase 5 — Notes + Quizzes (pending)
+### Phase 5 — Notes + Quizzes ✅ DONE
+**All items complete. Committed as `feat: Phase 5 — Notes + Quizzes`**.
+
+**Backend (completed):**
+- [x] Models: `Note`, `Quiz`, `QuizQuestion`, `QuizAttempt`, `QuizResponse`
+- [x] Alembic migration: `1afc5ac08801` (notes, quizzes, quiz_questions, quiz_attempts, quiz_responses tables)
+- [x] Notes CRUD API: `GET /api/notes`, `POST /api/notes`, `GET /api/notes/{id}`, `PUT /api/notes/{id}`, `DELETE /api/notes/{id}`
+- [x] Notes generate endpoint: `POST /api/notes/generate` with `note_type` param (summary/key_concepts/definitions/revision)
+- [x] Notes generation service (`app/services/notes.py`): Gemini-grounded, type-specific prompts, JSON parse + fallback
+- [x] Quiz generate endpoint: `POST /api/quizzes/generate` (MCQ + short answer + mixed support)
+- [x] Quiz list endpoint: `GET /api/quizzes` (answer keys stripped from list response)
+- [x] Quiz get endpoint: `GET /api/quizzes/{id}` (full details incl. answer keys for owner)
+- [x] Quiz delete endpoint: `DELETE /api/quizzes/{id}`
+- [x] Quiz submit endpoint: `POST /api/quizzes/{id}/submit` — grades MCQ and short answer (rule-based keyword overlap ≥50%)
+- [x] Quiz attempts endpoint: `GET /api/quizzes/{id}/attempts`
+- [x] Quiz summary endpoint: `GET /api/quizzes/{id}/summary` (total attempts, avg score, best score, recent attempts)
+- [x] Quiz generation service (`app/services/quizzes.py`): Gemini prompt-based, Pydantic-validated MCQ schema, answer key protection
+- [x] Grading service: MCQ exact-match, short-answer keyword-overlap (≥50% threshold)
+- [x] Ownership isolation on all endpoints
+- [x] Tests: **16 new tests** (all passing)
+  - Notes CRUD (list empty, create, get, update, delete, ownership isolation)
+  - Quiz generate (no chunks error, success with mocked Gemini, missing subject/doc validation)
+  - Quiz list (empty, ownership isolation)
+  - Quiz submit (MCQ correct, MCQ wrong, short answer with keyword overlap)
+  - Quiz summary, Quiz delete
+
+**Frontend (completed):**
+- [x] Types: `Note`, `NoteCreate`, `Quiz`, `QuizQuestion`, `QuizAttempt`, `QuizResponse`, `QuizSummary`, `QuizGenerateRequest`, `QuizSubmitRequest`
+- [x] Service: `noteApi` (list, get, create, update, delete, generate) + `quizApi` (list, get, generate, delete, submit, getAttempts, getSummary)
+- [x] Hooks: `useNotes`, `useNote`, `useCreateNote`, `useUpdateNote`, `useDeleteNote`, `useGenerateNote`, `useQuizzes`, `useQuiz`, `useQuizAttempts`, `useQuizSummary`, `useGenerateQuiz`, `useSubmitQuiz`, `useDeleteQuiz`
+- [x] Pages: `Notes.tsx` (list + generate dialog), `NotesDetail.tsx` (view/edit), `Quizzes.tsx` (list + generate + delete), `QuizTake.tsx` (take quiz with MCQ/radio + short answer/textarea + submit + results), `QuizResults.tsx` (score summary + per-question breakdown + attempt history)
+- [x] Routes: `/notes`, `/notes/:id`, `/quizzes`, `/quizzes/:id`, `/quizzes/:id/results` added to `App.tsx`
+- [x] Sidebar: Notes and Quizzes links added
+- [x] TypeScript compiles clean (`tsc --noEmit` passes)
+- [x] Frontend build passes (`npm run build`)
+
+**Tests: 62/62 passing** (8 subjects + 14 documents + 12 OCR + 12 chat + 16 notes+quizzes)
 
 ---
 
@@ -347,6 +383,7 @@ ai-study-assistant/
 - `docs: update PROGRESS.md — Phase 2 fully complete with frontend` (8714e66)
 - `feat: Phase 3 — OCR` — OcrProvider interface, Gemini vision provider, Tesseract fallback, needs_review flagging, multi-image upload, page edit/re-embed API, per-page review UI, 12 OCR tests + 34 total backend tests passing, frontend build clean.
 - `feat: Phase 4 — Tutor` — RAG retrieval service, Gemini grounded QA with citation validation, chat sessions/messages API, frontend tutor pages with chat UI, 12 new tests, 46 total backend tests passing, frontend build clean.
+- `feat: Phase 5 — Notes + Quizzes` — Note/Quiz models + Alembic migration, Gemini-grounded notes generation (4 types), quiz generation (MCQ + short answer + mixed), rule-based grading, full CRUD + submit + attempts + summary APIs, frontend Notes/Quizzes pages with generate dialogs and quiz-take UI, 16 new tests, 62 total backend tests passing, frontend build clean.
 
 ---
 

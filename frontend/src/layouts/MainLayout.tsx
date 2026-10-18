@@ -12,7 +12,15 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { BookOpen, LayoutDashboard, LogOut, Folder, MessageSquare } from 'lucide-react'
+import {
+  BookOpen,
+  LayoutDashboard,
+  LogOut,
+  Folder,
+  MessageSquare,
+  PenLine,
+  CircleHelp,
+} from 'lucide-react'
 
 export default function Layout() {
   const { user, signOut } = useAuth()
@@ -22,6 +30,17 @@ export default function Layout() {
   const handleSignOut = async () => {
     await signOut()
     navigate('/login')
+  }
+
+  const getHeading = () => {
+    const p = location.pathname
+    if (p === '/') return 'Dashboard'
+    if (p === '/tutor') return 'AI Tutor'
+    if (p === '/subjects') return 'Subjects'
+    if (p.startsWith('/subjects/')) return 'Subject Details'
+    if (p === '/notes' || p.startsWith('/notes/')) return 'Notes'
+    if (p === '/quizzes' || p.startsWith('/quizzes/')) return 'Quizzes'
+    return 'Study Assistant'
   }
 
   return (
@@ -53,6 +72,22 @@ export default function Layout() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Notes">
+                  <Link to="/notes" className="flex items-center gap-3">
+                    <PenLine className="h-4 w-4" />
+                    <span>Notes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Quizzes">
+                  <Link to="/quizzes" className="flex items-center gap-3">
+                    <CircleHelp className="h-4 w-4" />
+                    <span>Quizzes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Subjects">
                   <Link to="/subjects" className="flex items-center gap-3">
                     <Folder className="h-4 w-4" />
@@ -76,12 +111,7 @@ export default function Layout() {
         <div className="flex flex-1 flex-col">
           <header className="border-b px-6 py-3 flex items-center gap-4">
             <SidebarTrigger />
-            <h1 className="text-lg font-semibold">
-              {location.pathname === '/' ? 'Dashboard' :
-               location.pathname === '/tutor' ? 'AI Tutor' :
-               location.pathname === '/subjects' ? 'Subjects' :
-               location.pathname.startsWith('/subjects/') ? 'Subject Details' : ''}
-            </h1>
+            <h1 className="text-lg font-semibold">{getHeading()}</h1>
           </header>
           <main className="flex-1 overflow-auto p-6">
             <Outlet />

@@ -1,4 +1,4 @@
-import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest } from '@/types'
+import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest, Note, NoteCreate, Quiz, QuizAttempt, QuizSummary, QuizGenerateRequest, QuizSubmitRequest } from '@/types'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -77,4 +77,44 @@ export const chatApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+}
+
+// Notes APIs
+export const noteApi = {
+  list: (subjectId?: string, documentId?: string) => {
+    const params = new URLSearchParams()
+    if (subjectId) params.set('subject_id', subjectId)
+    if (documentId) params.set('document_id', documentId)
+    const query = params.toString()
+    return apiFetch<Note[]>(`/notes${query ? `?${query}` : ''}`)
+  },
+  get: (id: string) => apiFetch<Note>(`/notes/${id}`),
+  create: (data: NoteCreate) => apiFetch<Note>('/notes', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<NoteCreate>) => apiFetch<Note>(`/notes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch<void>(`/notes/${id}`, { method: 'DELETE' }),
+  generate: (params: { subject_id?: string; document_id?: string; note_type?: string; title?: string }) => {
+    const qs = new URLSearchParams()
+    if (params.subject_id) qs.set('subject_id', params.subject_id)
+    if (params.document_id) qs.set('document_id', params.document_id)
+    if (params.note_type) qs.set('note_type', params.note_type)
+    if (params.title) qs.set('title', params.title)
+    const query = qs.toString()
+    return apiFetch<Note>(`/notes/generate${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
+}
+
+// Quiz APIs
+export const quizApi = {
+  list: (subjectId?: string) => {
+    const params = subjectId ? `?subject_id=${subjectId}` : ''
+    return apiFetch<Quiz[]>(`/quizzes/${params}`)
+  },
+  get: (id: string) => apiFetch<Quiz>(`/quizzes/${id}`),
+  generate: (data: QuizGenerateRequest) =>
+    apiFetch<Quiz>('/quizzes/generate', { method: 'POST', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch<void>(`/quizzes/${id}`, { method: 'DELETE' }),
+  submit: (id: string, data: QuizSubmitRequest) =>
+    apiFetch<QuizAttempt>(`/quizzes/${id}/submit`, { method: 'POST', body: JSON.stringify(data) }),
+  getAttempts: (id: string) => apiFetch<QuizAttempt[]>(`/quizzes/${id}/attempts`),
+  getSummary: (id: string) => apiFetch<QuizSummary>(`/quizzes/${id}/summary`),
 }

@@ -6,6 +6,8 @@ from .document_chunk import DocumentChunk
 from .processing_job import ProcessingJob
 from .chat_session import ChatSession
 from .chat_message import ChatMessage
+from .note import Note
+from .quiz import Quiz, QuizQuestion, QuizAttempt, QuizResponse
 
 __all__ = [
     "Profile",
@@ -16,4 +18,9 @@ __all__ = [
     "ProcessingJob",
     "ChatSession",
     "ChatMessage",
+    "Note",
+    "Quiz",
+    "QuizQuestion",
+    "QuizAttempt",
+    "QuizResponse",
 ]

@@ -12,6 +12,11 @@ import Documents from '@/pages/Documents'
 import DocumentDetail from '@/pages/DocumentDetail'
 import Tutor from '@/pages/Tutor'
 import TutorSession from '@/pages/TutorSession'
+import Notes from '@/pages/Notes'
+import NotesDetail from '@/pages/NotesDetail'
+import Quizzes from '@/pages/Quizzes'
+import QuizTake from '@/pages/QuizTake'
+import QuizResults from '@/pages/QuizResults'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +65,11 @@ export default function App() {
               <Route path="documents/:id" element={<DocumentDetail />} />
               <Route path="tutor" element={<Tutor />} />
               <Route path="tutor/:sessionId" element={<TutorSession />} />
+              <Route path="notes" element={<Notes />} />
+              <Route path="notes/:id" element={<NotesDetail />} />
+              <Route path="quizzes" element={<Quizzes />} />
+              <Route path="quizzes/:id" element={<QuizTake />} />
+              <Route path="quizzes/:id/results" element={<QuizResults />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
