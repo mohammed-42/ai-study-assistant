@@ -1,8 +1,8 @@
 # AI Study Assistant — PROGRESS.md
 
 ## Current state
-- **Phase in progress:** 6 — Planner + Dashboard ✅ COMPLETE
-- **Phase status:** Phases 1–6 complete and committed; Phase 7 (Hardening) pending
+- **Phase in progress:** 7 — Hardening (pending)
+- **Phase status:** Phases 1–6 complete and committed; 81/81 backend tests passing; frontend build clean
 - **Last updated:** 2026-10-20
 
 ---
@@ -206,6 +206,7 @@
 | pytest-asyncio | 0.23.8 with `asyncio_mode = auto` in `pytest.ini` | Cleanest async test support on Python 3.13 |
 | shadcn version | `npx shadcn@latest` (v4.21) | Current recommended CLI; deprecated `shadcn-ui` avoided |
 | PyMuPDF import | Lazy (deferred) | Windows DLL policy blocks import at module load time; chunking logic tested standalone without it |
+| SQLAlchemy version | 2.0.55 (pinned) | 2.1.x Cython extensions blocked by Windows Application Control policy; 2.0.55 works |
 
 ---
 
@@ -275,7 +276,7 @@ ai-study-assistant/
       core/config.py           # Settings (lazy-loaded, env-overridable)
       db/base.py               # Base, get_db, init_db, reset_db_for_testing
       models/
-        __init__.py            # Exports: Profile, Subject, Document, DocumentPage, DocumentChunk, ProcessingJob, ChatSession, ChatMessage
+        __init__.py            # Exports: Profile, Subject, Document, DocumentPage, DocumentChunk, ProcessingJob, ChatSession, ChatMessage, StudyPlan, StudyTask
         profile.py             # profiles table
         subject.py             # subjects table
         document.py            # documents table
@@ -284,18 +285,20 @@ ai-study-assistant/
         processing_job.py      # processing_jobs table
         chat_session.py        # chat_sessions table
         chat_message.py        # chat_messages table
+        planner.py             # study_plans, study_tasks tables
       schemas/
         subject.py             # SubjectCreate, SubjectOut, SubjectUpdate
         document.py            # DocumentOut, DocumentPageOut, DocumentChunkOut
         chat.py                # ChatSessionOut, ChatMessageOut, MessageCreate
       api/
-        __init__.py            # health_router, subjects_router, documents_router, upload_router, pages_router, chat_router
+        __init__.py            # health_router, subjects_router, documents_router, upload_router, pages_router, chat_router, planner_router
         deps.py                # get_current_user (Supabase JWT verify via JWKS)
         health.py              # GET /api/health
         subjects.py            # CRUD /api/subjects (owner-scoped)
         documents.py           # GET/DELETE/retry documents, pages, chunks
         upload.py              # POST /api/documents/upload (file validation)
         chat.py                # Chat sessions and messages CRUD
+        planner.py             # Planner CRUD, generate/regenerate, dashboard stats
       rag/
         __init__.py            # RAG service exports
         retriever.py           # Vector search with pgvector, ownership filtering
@@ -308,19 +311,21 @@ ai-study-assistant/
         test_documents.py      # 14 tests, all passing
         test_ocr.py            # 12 tests, all passing
         test_chat.py           # 12 tests, all passing
+        test_planner.py        # 19 tests, all passing
     alembic/
       env.py                   # Sync engine for migrations
       ini                      # points at SQLite for dev
       versions/
         44187703b244_initial_schema_profiles_subjects.py
         bb319edf69d1_documents_pages_chunks_processing_jobs.py
+        e34c954767af_study_plans_and_tasks.py
     .env                       # local dev (SQLite)
     .env.example
     requirements.txt
     pytest.ini
   frontend/
     src/
-      App.tsx                  # Router: /login, /register, / (protected), /subjects, /subjects/:id, /documents, /documents/:id
+      App.tsx                  # Router: /login, /register, / (protected), /subjects, /subjects/:id, /documents, /documents/:id, /tutor, /tutor/:sessionId, /notes, /notes/:id, /quizzes, /quizzes/:id, /quizzes/:id/results, /planner, /planner/:id
       main.tsx
       index.css                # Tailwind + shadcn CSS vars
       types/index.ts           # Subject, UserProfile, AppDocument, DocumentPage, DocumentChunk, Database
@@ -329,20 +334,23 @@ ai-study-assistant/
         use-toast.tsx          # Toast hook + Toaster component
         use-documents.ts       # useDocuments, useDeleteDocument, useRetryDocument, useUploadDocument
         use-chat.ts            # useChatSessions, useChatMessages, useCreateChatSession, useDeleteChatSession, useSendChatMessage
+        use-planner.ts         # usePlannerPlans, usePlannerPlan, useCreatePlan, useUpdatePlan, useDeletePlan, useGenerateSchedule, useRegenerateSchedule, useUpdateTask, useDashboard
       layouts/MainLayout.tsx   # Sidebar + header + Outlet
       pages/
         Login.tsx
         Register.tsx
-        Dashboard.tsx          # subject cards, empty state
+        Dashboard.tsx          # subject cards, empty state, real stats from /planner/dashboard
         Subjects.tsx           # list/create/delete with mutations
         SubjectDetail.tsx
         Documents.tsx          # document list table with status badges
         DocumentDetail.tsx     # pages and chunks display
         Tutor.tsx              # Chat session list page
         TutorSession.tsx       # Chat UI with message display and citation badges
+        Planner.tsx            # Plan list + create dialog
+        PlanDetail.tsx         # Plan view + task management + generate/regenerate
       services/
         supabase.ts            # createSupabaseClient
-        api.ts                 # apiFetch wrapper + documentApi + chatApi
+        api.ts                 # apiFetch wrapper + documentApi + chatApi + plannerApi
       components/ui/           # shadcn components (17 components including badge)
     package.json
     vite.config.ts
@@ -374,22 +382,8 @@ ai-study-assistant/
 
 ---
 
-## Commits
-
-- `feat: Phase 1 — Foundation complete` (1d9dcc0) — repo scaffold, docker-compose, config validation, models + Alembic migration, health check, Supabase Auth token verification middleware, subjects CRUD (backend + frontend), protected routing, dashboard shell, 8 backend tests passing, frontend build clean.
-- `feat: Phase 2 — Documents` (6e8db95) — backend models (Document, DocumentPage, DocumentChunk, ProcessingJob), Alembic migration bb319edf69d1, upload endpoint with validation, CRUD API, processing stub, 14 document tests passing.
-- `feat: Phase 2 frontend documents pages` (09c7b3b) — frontend Document types, documentApi service, useDocuments hook, Documents list page, DocumentDetail page, routes, badge component.
-- `docs: update PROGRESS.md — Phase 2 fully complete with frontend` (8714e66)
-- `feat: Phase 3 — OCR` — OcrProvider interface, Gemini vision provider, Tesseract fallback, needs_review flagging, multi-image upload, page edit/re-embed API, per-page review UI, 12 OCR tests + 34 total backend tests passing, frontend build clean.
-- `feat: Phase 4 — Tutor` — RAG retrieval service, Gemini grounded QA with citation validation, chat sessions/messages API, frontend tutor pages with chat UI, 12 new tests, 46 total backend tests passing, frontend build clean.
-- `feat: Phase 5 — Notes + Quizzes` — Note/Quiz models + Alembic migration, Gemini-grounded notes generation (4 types), quiz generation (MCQ + short answer + mixed), rule-based grading, full CRUD + submit + attempts + summary APIs, frontend Notes/Quizzes pages with generate dialogs and quiz-take UI, 16 new tests, 62 total backend tests passing, frontend build clean.
-- `fix: Phase 6 planner tests — cascade delete + subject_id constraint` (36d7afa) — explicit task cascade in delete_plan endpoint, fix test_document_counts_subject_id constraint, pin SQLAlchemy 2.0.55 (Windows DLL block on 2.1.x Cython). 81/81 tests passing.
-- `docs: update PROGRESS.md — Phase 6 complete, 81/81 tests passing` — progress.md updated with Phase 6 full details.
-
-
-ke UI, 16 new tests, 62 total backend tests passing, frontend build clean.                                                                    
 ### Phase 6 — Planner + Dashboard ✅ COMPLETE
-**All items complete. Committed as `fix: Phase 6 planner tests — cascade delete + subject_id constraint` (36d7afa).**
+**All items complete. Committed as `feat: Phase 6 — Planner + Dashboard` (2ca957b) + `fix: Phase 6 planner tests` (36d7afa).**
 
 **Backend (completed):**
 - [x] Models: `StudyPlan`, `StudyTask` in `app/models/planner.py`
@@ -407,9 +401,7 @@ ke UI, 16 new tests, 62 total backend tests passing, frontend build clean.
   - `DELETE /api/planner/tasks/{id}` — delete task
   - `GET /api/planner/dashboard` — computed stats (doc counts, active plans, today's tasks, plan progress, weak topics)
 - [x] Ownership isolation on all endpoints
-- [x] Import path fixes applied: `app.models.study_plan` → `app.models.planner`, `app.models.quiz_attempt` → `app.models.quiz`
-- [x] `db.func` → `func` import fix in planner.py
-- [x] SQLAlchemy downgraded to 2.0.55 (Windows DLL block on 2.1.x Cython extensions)
+- [x] SQLAlchemy pinned to 2.0.55 (Windows DLL block on 2.1.x Cython extensions)
 
 **Frontend (completed):**
 - [x] Types: `StudyPlan`, `StudyPlanCreate`, `StudyPlanUpdate`, `StudyTask`, `StudyTaskUpdate`, `DashboardData` in `types/index.ts`
@@ -444,57 +436,16 @@ ke UI, 16 new tests, 62 total backend tests passing, frontend build clean.
 - **Cascade delete**: SQLite ORM doesn't enforce FK CASCADE → explicit `DELETE FROM study_tasks WHERE plan_id = ?` before plan delete
 - **Test data**: `Document.subject_id` NOT NULL → test now creates a subject first
 
-### Phase 6 — Planner + Dashboard ✅ BACKEND + FRONTEND COMPLETE (tests in progress)
-**Backend (completed):**
-- [x] Models: `StudyPlan`, `StudyTask` in `app/models/planner.py`
-- [x] Alembic migration: `e34c954767af` (study_plans, study_tasks tables)
-- [x] Rule-based scheduler service (`app/services/planner.py`): `generate_schedule()`, `regenerate_plan()` — respects daily minutes, preferred days, importance scoring, quiz performance
-- [x] API endpoints (`app/api/planner.py`):
-  - `GET /api/planner/plans` — list (owner-scoped)
-  - `POST /api/planner/plans` — create
-  - `GET /api/planner/plans/{id}` — get with tasks
-  - `PUT /api/planner/plans/{id}` — update (title, exam_date, daily_minutes, preferred_days, topics, status)
-  - `DELETE /api/planner/plans/{id}` — delete (cascade)
-  - `POST /api/planner/plans/{id}/generate` — generate schedule from topics
-  - `POST /api/planner/plans/{id}/regenerate` — regenerate (preserves completed tasks)
-  - `PUT /api/planner/tasks/{id}` — update task status/actual_minutes
-  - `DELETE /api/planner/tasks/{id}` — delete task
-  - `GET /api/planner/dashboard` — computed stats (doc counts, active plans, today's tasks, plan progress, weak topics)
-- [x] Ownership isolation on all endpoints
-- [x] Import path fixes applied: `app.models.study_plan` → `app.models.planner`, `app.models.quiz_attempt` → `app.models.quiz`
-- [x] `db.func` → `func` import fix in planner.py
+---
 
-**Frontend (completed):**
-- [x] Types: `StudyPlan`, `StudyPlanCreate`, `StudyPlanUpdate`, `StudyTask`, `StudyTaskUpdate`, `DashboardData` in `types/index.ts`
-- [x] Service: `plannerApi` in `services/api.ts` (listPlans, getPlan, createPlan, updatePlan, deletePlan, generateSchedule, regenerateSchedule, updateTask, deleteTask, getDashboard)
-- [x] Hooks: `use-planner.ts` — usePlannerPlans, usePlannerPlan, useCreatePlan, useUpdatePlan, useDeletePlan, useGenerateSchedule, useRegenerateSchedule, useUpdateTask, useDashboard
-- [x] Pages: `Planner.tsx` (plan list + create dialog), `PlanDetail.tsx` (plan view + task management + generate/regenerate)
-- [x] Routes: `/planner`, `/planner/:id` added to `App.tsx`
-- [x] Sidebar: Planner link added
-- [x] Dashboard updated: real stats cards (documents, plans, today's tasks, plan progress %)
-- [x] TypeScript compiles clean (`tsc --noEmit` passes)
-- [x] Frontend build passes (`npm run build`)
+## Commits
 
-**Tests (in progress — writing):**
-- [x] `tests/test_planner.py` created with 19 test cases covering:
-  - Plan CRUD (create, list, get, update, delete)
-  - Ownership isolation
-  - Schedule generation (creates tasks, rejects past exam)
-  - Task updates and deletion
-  - Dashboard stats
-- [ ] Fix remaining test failures (cascade delete SQL, Document subject_id NOT NULL constraint) before final commit
-- [ ] Expected: 62 + 19 = 81 total backend tests passing once cascade issue resolved
-
-**Bugs fixed mid-stream:**
-- `planner.py` syntax error: `un scheduled_topics` → `unscheduled_topics` (services/planner.py line 85)
-- `planner.py` double-dot: `..scalars().all()` → `.scalars().all()` (api/planner.py line 304)
-- Wrong imports: `study_plan`, `study_task`, `quiz_attempt` → `planner`, `quiz`
-- `regenerate_schedule` endpoint had `Depends(get_current_user)` for `db` param → fixed to `Depends(get_db)`
-- Quiz join referenced `StudyPlan` instead of `Quiz` model
-- Dashboard used `db.func` (AsyncSession has no `func`) → replaced with `sqlalchemy.func`
-- Frontend: removed unused `plannerApi` import in Planner.tsx, removed unused `StudyPlan` type import
-
-**Known issues:**
-- SQLite CASCADE delete not enforced — `test_delete_plan_cascades_tasks` fails because SQLAlchemy `DELETE` on plan doesn't remove orphaned tasks in SQLite without explicit cascade handling in the session
-- `Document.subject_id` is required (NOT NULL) — `test_dashboard_counts_documents` fails because test creates a Document without a subject_id
-- These are test-data issues, not production bugs
+- `feat: Phase 1 — Foundation complete` (1d9dcc0) — repo scaffold, docker-compose, config validation, models + Alembic migration, health check, Supabase Auth token verification middleware, subjects CRUD (backend + frontend), protected routing, dashboard shell, 8 backend tests passing, frontend build clean.
+- `feat: Phase 2 — Documents` (6e8db95) — backend models (Document, DocumentPage, DocumentChunk, ProcessingJob), Alembic migration bb319edf69d1, upload endpoint with validation, CRUD API, processing stub, 14 document tests passing.
+- `feat: Phase 2 frontend documents pages` (09c7b3b) — frontend Document types, documentApi service, useDocuments hook, Documents list page, DocumentDetail page, routes, badge component.
+- `docs: update PROGRESS.md — Phase 2 fully complete with frontend` (8714e66)
+- `feat: Phase 3 — OCR` — OcrProvider interface, Gemini vision provider, Tesseract fallback, needs_review flagging, multi-image upload, page edit/re-embed API, per-page review UI, 12 OCR tests + 34 total backend tests passing, frontend build clean.
+- `feat: Phase 4 — Tutor` — RAG retrieval service, Gemini grounded QA with citation validation, chat sessions/messages API, frontend tutor pages with chat UI, 12 new tests, 46 total backend tests passing, frontend build clean.
+- `feat: Phase 5 — Notes + Quizzes` — Note/Quiz models + Alembic migration, Gemini-grounded notes generation (4 types), quiz generation (MCQ + short answer + mixed), rule-based grading, full CRUD + submit + attempts + summary APIs, frontend Notes/Quizzes pages with generate dialogs and quiz-take UI, 16 new tests, 62 total backend tests passing, frontend build clean.
+- `feat: Phase 6 — Planner + Dashboard` (2ca957b) — StudyPlan/StudyTask models, Alembic migration e34c954767af, rule-based scheduler, full CRUD API, generate/regenerate endpoints, dashboard stats, frontend Planner/PlanDetail pages, 19 new tests.
+- `fix: Phase 6 planner tests — cascade delete + subject_id constraint` (36d7afa) — explicit task cascade in delete_plan endpoint, fix test_document_counts_subject_id constraint, pin SQLAlchemy 2.0.55 (Windows DLL block on 2.1.x Cython). 81/81 tests passing.
