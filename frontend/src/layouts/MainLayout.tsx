@@ -20,6 +20,7 @@ import {
   MessageSquare,
   PenLine,
   CircleHelp,
+  CalendarDays,
 } from 'lucide-react'
 
 export default function Layout() {
@@ -40,6 +41,7 @@ export default function Layout() {
     if (p.startsWith('/subjects/')) return 'Subject Details'
     if (p === '/notes' || p.startsWith('/notes/')) return 'Notes'
     if (p === '/quizzes' || p.startsWith('/quizzes/')) return 'Quizzes'
+    if (p === '/planner' || p.startsWith('/planner/')) return 'Study Planner'
     return 'Study Assistant'
   }
 
@@ -92,6 +94,14 @@ export default function Layout() {
                   <Link to="/subjects" className="flex items-center gap-3">
                     <Folder className="h-4 w-4" />
                     <span>Subjects</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Study Planner">
+                  <Link to="/planner" className="flex items-center gap-3">
+                    <CalendarDays className="h-4 w-4" />
+                    <span>Planner</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

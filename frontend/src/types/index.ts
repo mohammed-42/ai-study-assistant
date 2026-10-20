@@ -219,3 +219,71 @@ export interface QuizSubmitRequest {
     user_answer?: string
   }[]
 }
+
+// Study Planner
+export type PlanStatus = 'active' | 'completed' | 'paused'
+export type TaskStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface StudyPlan {
+  id: string
+  owner_id: string
+  subject_id: string | null
+  exam_date: string
+  title: string
+  daily_minutes: number
+  preferred_days: string[]
+  topics: string[]
+  status: PlanStatus
+  created_at: string
+  updated_at: string
+  tasks?: StudyTask[]
+}
+
+export interface StudyPlanCreate {
+  subject_id?: string
+  title: string
+  exam_date: string
+  daily_minutes: number
+  preferred_days: string[]
+  topics: string[]
+}
+
+export interface StudyPlanUpdate {
+  title?: string
+  exam_date?: string
+  daily_minutes?: number
+  preferred_days?: string[]
+  topics?: string[]
+  status?: PlanStatus
+}
+
+export interface StudyTask {
+  id: string
+  plan_id: string
+  topic: string
+  importance: number
+  scheduled_days: string[]
+  scheduled_date: string | null
+  status: TaskStatus
+  estimated_minutes: number
+  actual_minutes: number | null
+  reason: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface StudyTaskUpdate {
+  status?: TaskStatus
+  actual_minutes?: number
+}
+
+export interface DashboardData {
+  document_counts: Record<string, number>
+  recent_notes: number
+  recent_quizzes: { score: number | null; date: string }[]
+  active_plans_count: number
+  today_pending_tasks: number
+  today_tasks_summary: { id: string; topic: string; estimated_minutes: number }[]
+  plan_progress: { total: number; completed: number; percentage: number }
+  weak_topics: { topic: string; importance: number }[]
+}

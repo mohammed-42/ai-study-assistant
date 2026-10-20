@@ -8,6 +8,7 @@ from .chat_session import ChatSession
 from .chat_message import ChatMessage
 from .note import Note
 from .quiz import Quiz, QuizQuestion, QuizAttempt, QuizResponse
+from .planner import StudyPlan, StudyTask
 
 __all__ = [
     "Profile",
@@ -23,4 +24,6 @@ __all__ = [
     "QuizQuestion",
     "QuizAttempt",
     "QuizResponse",
+    "StudyPlan",
+    "StudyTask",
 ]

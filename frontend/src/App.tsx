@@ -17,6 +17,8 @@ import NotesDetail from '@/pages/NotesDetail'
 import Quizzes from '@/pages/Quizzes'
 import QuizTake from '@/pages/QuizTake'
 import QuizResults from '@/pages/QuizResults'
+import Planner from '@/pages/Planner'
+import PlanDetail from '@/pages/PlanDetail'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +72,8 @@ export default function App() {
               <Route path="quizzes" element={<Quizzes />} />
               <Route path="quizzes/:id" element={<QuizTake />} />
               <Route path="quizzes/:id/results" element={<QuizResults />} />
+              <Route path="planner" element={<Planner />} />
+              <Route path="planner/:id" element={<PlanDetail />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

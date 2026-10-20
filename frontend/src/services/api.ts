@@ -1,4 +1,4 @@
-import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest, Note, NoteCreate, Quiz, QuizAttempt, QuizSummary, QuizGenerateRequest, QuizSubmitRequest } from '@/types'
+import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest, Note, NoteCreate, Quiz, QuizAttempt, QuizSummary, QuizGenerateRequest, QuizSubmitRequest, StudyPlan, StudyPlanCreate, StudyPlanUpdate, StudyTask, StudyTaskUpdate, DashboardData } from '@/types'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -117,4 +117,23 @@ export const quizApi = {
     apiFetch<QuizAttempt>(`/quizzes/${id}/submit`, { method: 'POST', body: JSON.stringify(data) }),
   getAttempts: (id: string) => apiFetch<QuizAttempt[]>(`/quizzes/${id}/attempts`),
   getSummary: (id: string) => apiFetch<QuizSummary>(`/quizzes/${id}/summary`),
+}
+
+// Planner APIs
+export const plannerApi = {
+  listPlans: () => apiFetch<StudyPlan[]>('/planner/plans'),
+  getPlan: (id: string) => apiFetch<StudyPlan>(`/planner/plans/${id}`),
+  createPlan: (data: StudyPlanCreate) =>
+    apiFetch<StudyPlan>('/planner/plans', { method: 'POST', body: JSON.stringify(data) }),
+  updatePlan: (id: string, data: StudyPlanUpdate) =>
+    apiFetch<StudyPlan>(`/planner/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePlan: (id: string) => apiFetch<void>(`/planner/plans/${id}`, { method: 'DELETE' }),
+  generateSchedule: (planId: string) =>
+    apiFetch<StudyTask[]>(`/planner/plans/${planId}/generate`, { method: 'POST' }),
+  regenerateSchedule: (planId: string) =>
+    apiFetch<StudyTask[]>(`/planner/plans/${planId}/regenerate`, { method: 'POST' }),
+  updateTask: (taskId: string, data: StudyTaskUpdate) =>
+    apiFetch<StudyTask>(`/planner/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTask: (taskId: string) => apiFetch<void>(`/planner/tasks/${taskId}`, { method: 'DELETE' }),
+  getDashboard: () => apiFetch<DashboardData>('/planner/dashboard'),
 }

@@ -1,12 +1,11 @@
 # AI Study Assistant — PROGRESS.md
 
 ## Current state
-- **Phase in progress:** 5 — Notes + Quizzes ✅ COMPLETE
-- **Phase status:** Phases 1–5 complete and committed; Phase 6 pending
-- **Last updated:** 2026-10-18
+- **Phase in progress:** 6 — Planner + Dashboard ✅ COMPLETE
+- **Phase status:** Phases 1–6 complete and committed; Phase 7 (Hardening) pending
+- **Last updated:** 2026-10-20
 
 ---
-
 ## Phase checklist
 
 ### Phase 1 — Foundation ✅ DONE (1 commit)
@@ -384,20 +383,118 @@ ai-study-assistant/
 - `feat: Phase 3 — OCR` — OcrProvider interface, Gemini vision provider, Tesseract fallback, needs_review flagging, multi-image upload, page edit/re-embed API, per-page review UI, 12 OCR tests + 34 total backend tests passing, frontend build clean.
 - `feat: Phase 4 — Tutor` — RAG retrieval service, Gemini grounded QA with citation validation, chat sessions/messages API, frontend tutor pages with chat UI, 12 new tests, 46 total backend tests passing, frontend build clean.
 - `feat: Phase 5 — Notes + Quizzes` — Note/Quiz models + Alembic migration, Gemini-grounded notes generation (4 types), quiz generation (MCQ + short answer + mixed), rule-based grading, full CRUD + submit + attempts + summary APIs, frontend Notes/Quizzes pages with generate dialogs and quiz-take UI, 16 new tests, 62 total backend tests passing, frontend build clean.
+- `fix: Phase 6 planner tests — cascade delete + subject_id constraint` (36d7afa) — explicit task cascade in delete_plan endpoint, fix test_document_counts_subject_id constraint, pin SQLAlchemy 2.0.55 (Windows DLL block on 2.1.x Cython). 81/81 tests passing.
+- `docs: update PROGRESS.md — Phase 6 complete, 81/81 tests passing` — progress.md updated with Phase 6 full details.
 
----
 
-## Phase 4 — Tutor (pending)
+ke UI, 16 new tests, 62 total backend tests passing, frontend build clean.                                                                    
+### Phase 6 — Planner + Dashboard ✅ COMPLETE
+**All items complete. Committed as `fix: Phase 6 planner tests — cascade delete + subject_id constraint` (36d7afa).**
 
-Planned:
-- [ ] RAG retrieval endpoint: vector search restricted to caller's documents + subject filters
-- [ ] Configurable top-k and minimum similarity threshold
-- [ ] Grounded answer generation via Gemini (question + retrieved chunks with citations)
-- [ ] Citation validation: verify referenced chunk IDs exist, resolve document name + page
-- [ ] Structured output: answer text + citations, reject invalid references
-- [ ] Insufficient-evidence path: explicit "materials don't cover this" message
-- [ ] Chat persistence: sessions + messages in Postgres
-- [ ] Follow-up questions using conversation history + fresh retrieval
-- [ ] Frontend tutor page with chat UI, citation display, loading states
-- [ ] Tests: retrieval authorization, citation validation, insufficient evidence, chat CRUD
-- [ ] Update PROGRESS.md, commit
+**Backend (completed):**
+- [x] Models: `StudyPlan`, `StudyTask` in `app/models/planner.py`
+- [x] Alembic migration: `e34c954767af` (study_plans, study_tasks tables)
+- [x] Rule-based scheduler service (`app/services/planner.py`): `generate_schedule()`, `regenerate_plan()` — respects daily minutes, preferred days, importance scoring, quiz performance
+- [x] API endpoints (`app/api/planner.py`):
+  - `GET /api/planner/plans` — list (owner-scoped)
+  - `POST /api/planner/plans` — create
+  - `GET /api/planner/plans/{id}` — get with tasks
+  - `PUT /api/planner/plans/{id}` — update (title, exam_date, daily_minutes, preferred_days, topics, status)
+  - `DELETE /api/planner/plans/{id}` — delete (cascade: explicit task deletion for SQLite compat)
+  - `POST /api/planner/plans/{id}/generate` — generate schedule from topics
+  - `POST /api/planner/plans/{id}/regenerate` — regenerate (preserves completed tasks)
+  - `PUT /api/planner/tasks/{id}` — update task status/actual_minutes
+  - `DELETE /api/planner/tasks/{id}` — delete task
+  - `GET /api/planner/dashboard` — computed stats (doc counts, active plans, today's tasks, plan progress, weak topics)
+- [x] Ownership isolation on all endpoints
+- [x] Import path fixes applied: `app.models.study_plan` → `app.models.planner`, `app.models.quiz_attempt` → `app.models.quiz`
+- [x] `db.func` → `func` import fix in planner.py
+- [x] SQLAlchemy downgraded to 2.0.55 (Windows DLL block on 2.1.x Cython extensions)
+
+**Frontend (completed):**
+- [x] Types: `StudyPlan`, `StudyPlanCreate`, `StudyPlanUpdate`, `StudyTask`, `StudyTaskUpdate`, `DashboardData` in `types/index.ts`
+- [x] Service: `plannerApi` in `services/api.ts` (listPlans, getPlan, createPlan, updatePlan, deletePlan, generateSchedule, regenerateSchedule, updateTask, deleteTask, getDashboard)
+- [x] Hooks: `use-planner.ts` — usePlannerPlans, usePlannerPlan, useCreatePlan, useUpdatePlan, useDeletePlan, useGenerateSchedule, useRegenerateSchedule, useUpdateTask, useDashboard
+- [x] Pages: `Planner.tsx` (plan list + create dialog), `PlanDetail.tsx` (plan view + task management + generate/regenerate)
+- [x] Routes: `/planner`, `/planner/:id` added to `App.tsx`
+- [x] Sidebar: Planner link added
+- [x] Dashboard updated: real stats cards (documents, plans, today's tasks, plan progress %)
+- [x] TypeScript compiles clean (`tsc --noEmit` passes)
+- [x] Frontend build passes (`npm run build`)
+
+**Tests (completed):**
+- [x] `tests/test_planner.py` — 19 tests, all passing
+  - Plan CRUD (create, list, get, update, delete)
+  - Ownership isolation
+  - Schedule generation (creates tasks, rejects past exam)
+  - Task updates and deletion
+  - Cascade delete (explicit task deletion for SQLite compat)
+  - Dashboard stats (returns stats, document counts with valid subject_id)
+
+**Tests: 81/81 passing** (8 subjects + 14 documents + 12 OCR + 12 chat + 16 notes+quizzes + 19 planner)
+
+**Bugs fixed mid-stream:**
+- `planner.py` syntax error: `un scheduled_topics` → `unscheduled_topics` (services/planner.py line 85)
+- `planner.py` double-dot: `..scalars().all()` → `.scalars().all()` (api/planner.py line 304)
+- Wrong imports: `study_plan`, `study_task`, `quiz_attempt` → `planner`, `quiz`
+- `regenerate_schedule` endpoint had `Depends(get_current_user)` for `db` param → fixed to `Depends(get_db)`
+- Quiz join referenced `StudyPlan` instead of `Quiz` model
+- Dashboard used `db.func` (AsyncSession has no `func`) → replaced with `sqlalchemy.func`
+- Frontend: removed unused `plannerApi` import in Planner.tsx, removed unused `StudyPlan` type import
+- **Cascade delete**: SQLite ORM doesn't enforce FK CASCADE → explicit `DELETE FROM study_tasks WHERE plan_id = ?` before plan delete
+- **Test data**: `Document.subject_id` NOT NULL → test now creates a subject first
+
+### Phase 6 — Planner + Dashboard ✅ BACKEND + FRONTEND COMPLETE (tests in progress)
+**Backend (completed):**
+- [x] Models: `StudyPlan`, `StudyTask` in `app/models/planner.py`
+- [x] Alembic migration: `e34c954767af` (study_plans, study_tasks tables)
+- [x] Rule-based scheduler service (`app/services/planner.py`): `generate_schedule()`, `regenerate_plan()` — respects daily minutes, preferred days, importance scoring, quiz performance
+- [x] API endpoints (`app/api/planner.py`):
+  - `GET /api/planner/plans` — list (owner-scoped)
+  - `POST /api/planner/plans` — create
+  - `GET /api/planner/plans/{id}` — get with tasks
+  - `PUT /api/planner/plans/{id}` — update (title, exam_date, daily_minutes, preferred_days, topics, status)
+  - `DELETE /api/planner/plans/{id}` — delete (cascade)
+  - `POST /api/planner/plans/{id}/generate` — generate schedule from topics
+  - `POST /api/planner/plans/{id}/regenerate` — regenerate (preserves completed tasks)
+  - `PUT /api/planner/tasks/{id}` — update task status/actual_minutes
+  - `DELETE /api/planner/tasks/{id}` — delete task
+  - `GET /api/planner/dashboard` — computed stats (doc counts, active plans, today's tasks, plan progress, weak topics)
+- [x] Ownership isolation on all endpoints
+- [x] Import path fixes applied: `app.models.study_plan` → `app.models.planner`, `app.models.quiz_attempt` → `app.models.quiz`
+- [x] `db.func` → `func` import fix in planner.py
+
+**Frontend (completed):**
+- [x] Types: `StudyPlan`, `StudyPlanCreate`, `StudyPlanUpdate`, `StudyTask`, `StudyTaskUpdate`, `DashboardData` in `types/index.ts`
+- [x] Service: `plannerApi` in `services/api.ts` (listPlans, getPlan, createPlan, updatePlan, deletePlan, generateSchedule, regenerateSchedule, updateTask, deleteTask, getDashboard)
+- [x] Hooks: `use-planner.ts` — usePlannerPlans, usePlannerPlan, useCreatePlan, useUpdatePlan, useDeletePlan, useGenerateSchedule, useRegenerateSchedule, useUpdateTask, useDashboard
+- [x] Pages: `Planner.tsx` (plan list + create dialog), `PlanDetail.tsx` (plan view + task management + generate/regenerate)
+- [x] Routes: `/planner`, `/planner/:id` added to `App.tsx`
+- [x] Sidebar: Planner link added
+- [x] Dashboard updated: real stats cards (documents, plans, today's tasks, plan progress %)
+- [x] TypeScript compiles clean (`tsc --noEmit` passes)
+- [x] Frontend build passes (`npm run build`)
+
+**Tests (in progress — writing):**
+- [x] `tests/test_planner.py` created with 19 test cases covering:
+  - Plan CRUD (create, list, get, update, delete)
+  - Ownership isolation
+  - Schedule generation (creates tasks, rejects past exam)
+  - Task updates and deletion
+  - Dashboard stats
+- [ ] Fix remaining test failures (cascade delete SQL, Document subject_id NOT NULL constraint) before final commit
+- [ ] Expected: 62 + 19 = 81 total backend tests passing once cascade issue resolved
+
+**Bugs fixed mid-stream:**
+- `planner.py` syntax error: `un scheduled_topics` → `unscheduled_topics` (services/planner.py line 85)
+- `planner.py` double-dot: `..scalars().all()` → `.scalars().all()` (api/planner.py line 304)
+- Wrong imports: `study_plan`, `study_task`, `quiz_attempt` → `planner`, `quiz`
+- `regenerate_schedule` endpoint had `Depends(get_current_user)` for `db` param → fixed to `Depends(get_db)`
+- Quiz join referenced `StudyPlan` instead of `Quiz` model
+- Dashboard used `db.func` (AsyncSession has no `func`) → replaced with `sqlalchemy.func`
+- Frontend: removed unused `plannerApi` import in Planner.tsx, removed unused `StudyPlan` type import
+
+**Known issues:**
+- SQLite CASCADE delete not enforced — `test_delete_plan_cascades_tasks` fails because SQLAlchemy `DELETE` on plan doesn't remove orphaned tasks in SQLite without explicit cascade handling in the session
+- `Document.subject_id` is required (NOT NULL) — `test_dashboard_counts_documents` fails because test creates a Document without a subject_id
+- These are test-data issues, not production bugs
