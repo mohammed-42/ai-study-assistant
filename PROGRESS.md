@@ -382,6 +382,16 @@ ai-study-assistant/
 
 8. ~~**OCR not started**~~ — Phase 3 complete: `OcrProvider` interface, Gemini vision provider, Tesseract fallback, page edit UI, re-embed pipeline all implemented.
 
+9. **Supabase router pooler unresponsive** — BLOCKED. DB connection returns `ENOTFOUND tenant/user postgres.ugfyugzvmducrseauoyy not found`. The pooler host resolves (65.0.195.55) but Supabase rejects the tenant. Likely needs re-enablement in Supabase Dashboard → Settings → Database → Connection pooling. Prevents all live DB writes and reads until resolved.
+
+10. **Hardcoded JWKS URL (fixed in 98c5405)** — `deps.py` previously hardcoded `https://api.supabase.com/auth/v1/keys` which returns 404; now reads from `settings.SUPABASE_JWKS_URL` ✅
+
+11. **python-jose `jwk.JWK` removed (fixed in 98c5405)** — `jwk.JWK(**target)` raises `AttributeError` in python-jose 3.5.0; replaced with `jwk.construct(target)` ✅
+
+12. **Gemini embedding model deprecated (fixed in 98c5405)** — `text-embedding-004` no longer exists; switched to `gemini-embedding-001` with `output_dimensionality=768` ✅
+
+13. **`gemini-2.0-flash` deprecated by Google** — API returns 404 recommending `gemini-3.8-flash`. OCR provider still uses `gemini-2.0-flash`; will need update when verified. 🔴 Not yet fixed.
+
 ---
 
 ### Phase 6 — Planner + Dashboard ✅ COMPLETE
@@ -438,9 +448,39 @@ ai-study-assistant/
 - **Cascade delete**: SQLite ORM doesn't enforce FK CASCADE → explicit `DELETE FROM study_tasks WHERE plan_id = ?` before plan delete
 - **Test data**: `Document.subject_id` NOT NULL → test now creates a subject first
 
+## Phase 7 — Hardening ✅ INTEGRATION AUDIT IN PROGRESS
+
+### Phase 7 — Integration Audit Step 1: JWKS + Embedding Model ✅ DONE (commit 98c5405)
+
+**Fixes applied (independently verified):**
+- [x] `app/api/deps.py` — replaced hardcoded JWKS URL (`https://api.supabase.com/auth/v1/keys` → 404) with `settings.SUPABASE_JWKS_URL`
+- [x] `app/api/deps.py` — fixed `jwk.JWK(**target)` → `jwk.construct(target)` (python-jose 3.5.0 removed `JWK` class)
+- [x] `app/ai/gemini.py` — changed `EMBEDDING_MODEL` default from `text-embedding-004` (removed from API) to `gemini-embedding-001`
+- [x] `app/ai/gemini.py` — added `output_dimensionality=dim` to `embed_content()` call for pgvector 768-dim compatibility
+- [x] `.env` — updated `EMBEDDING_MODEL=gemini-embedding-001` (gitignored)
+- [x] `tests/test_jwks.py` — 9 new tests: JWKS URL sourcing, `_find_key` resolution, embedding model validity
+
+**Verified results (live checks):**
+- JWKS endpoint (`https://ugfyugzvmducrseauoyy.supabase.co/auth/v1/.well-known/jwks.json`): **VERIFIED** — HTTP 200, 1 key returned
+- `jwk.construct()` with live JWKS key: **VERIFIED** — produces valid PEM (178 chars)
+- `gemini-embedding-001` with `output_dimensionality=768`: **VERIFIED** — returns 768-dim embedding
+- `gemini-embedding-001` default (no output_dimensionality): returns 3072-dim (confirms param needed)
+- `text-embedding-004`: **BLOCKED** — confirmed removed from API (404)
+- `gemini-2.0-flash`: **BLOCKED** — deprecated by Google; use `gemini-3.8-flash`
+- Supabase DB pooler: **BLOCKED** — `ENOTFOUND tenant/user` error (see Known issues #9)
+
+**Test results:** 90/90 passing (81 existing + 9 new), frontend build clean, TypeScript clean.
+
+**Remaining blockers:**
+- Supabase router pooler connectivity (BLOCKED — see Known issue #9)
+- Full document pipeline end-to-end (blocked until DB pooler resolved)
+- Supabase Storage bucket upload/download (blocked until DB pooler resolved)
+
 ---
 
-## Commits
+### Phase 7 — Integration Audit Step 2: Storage + Document Processing
+
+*Audit in progress — see report after completion.*
 
 - `feat: Phase 1 — Foundation complete` (1d9dcc0) — repo scaffold, docker-compose, config validation, models + Alembic migration, health check, Supabase Auth token verification middleware, subjects CRUD (backend + frontend), protected routing, dashboard shell, 8 backend tests passing, frontend build clean.
 - `feat: Phase 2 — Documents` (6e8db95) — backend models (Document, DocumentPage, DocumentChunk, ProcessingJob), Alembic migration bb319edf69d1, upload endpoint with validation, CRUD API, processing stub, 14 document tests passing.
@@ -451,3 +491,5 @@ ai-study-assistant/
 - `feat: Phase 5 — Notes + Quizzes` — Note/Quiz models + Alembic migration, Gemini-grounded notes generation (4 types), quiz generation (MCQ + short answer + mixed), rule-based grading, full CRUD + submit + attempts + summary APIs, frontend Notes/Quizzes pages with generate dialogs and quiz-take UI, 16 new tests, 62 total backend tests passing, frontend build clean.
 - `feat: Phase 6 — Planner + Dashboard` (2ca957b) — StudyPlan/StudyTask models, Alembic migration e34c954767af, rule-based scheduler, full CRUD API, generate/regenerate endpoints, dashboard stats, frontend Planner/PlanDetail pages, 19 new tests.
 - `fix: Phase 6 planner tests — cascade delete + subject_id constraint` (36d7afa) — explicit task cascade in delete_plan endpoint, fix test_document_counts_subject_id constraint, pin SQLAlchemy 2.0.55 (Windows DLL block on 2.1.x Cython). 81/81 tests passing.
+- `fix: Phase 7 audit — JWKS URL, _find_key bug, embedding model deprecation` (98c5405) — deps.py uses settings.SUPABASE_JWKS_URL (was hardcoded 404), jwk.JWK→jwk.construct (python-jose 3.5.0), gemini-embedding-001 replaces text-embedding-004, output_dimensionality=768. 90/90 tests passing.
+- `docs: update PROGRESS.md — Phase 7 integration audit findings` (98c5405) — records Phase 7 Step 1 fixes.
