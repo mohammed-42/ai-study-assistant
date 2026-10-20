@@ -24,7 +24,7 @@ async def get_current_user(
 
     token = credentials.credentials
     # Fetch Supabase JWKS and verify JWT
-    jwks_url = "https://api.supabase.com/auth/v1/keys"
+    jwks_url = settings.SUPABASE_JWKS_URL
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(jwks_url)
@@ -96,5 +96,5 @@ def _find_key(jwks: dict, kid: str | None) -> str:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="no matching JWKS key found",
         )
-    key = jwk.JWK(**target)
+    key = jwk.construct(target)
     return key.to_pem().decode()

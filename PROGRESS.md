@@ -1,8 +1,8 @@
 # AI Study Assistant — PROGRESS.md
 
 ## Current state
-- **Phase in progress:** 7 — Hardening (pending)
-- **Phase status:** Phases 1–6 complete and committed; 81/81 backend tests passing; frontend build clean
+- **Phase in progress:** 7 — Hardening (integration audit in progress)
+- **Phase status:** Phases 1–6 complete and committed; 90/90 backend tests passing; frontend build clean
 - **Last updated:** 2026-10-20
 
 ---
@@ -207,6 +207,8 @@
 | shadcn version | `npx shadcn@latest` (v4.21) | Current recommended CLI; deprecated `shadcn-ui` avoided |
 | PyMuPDF import | Lazy (deferred) | Windows DLL policy blocks import at module load time; chunking logic tested standalone without it |
 | SQLAlchemy version | 2.0.55 (pinned) | 2.1.x Cython extensions blocked by Windows Application Control policy; 2.0.55 works |
+| Gemini embedding model | `gemini-embedding-001` | `text-embedding-004` deprecated/removed from API; new model supports `output_dimensionality=768` for pgvector backward compat |
+| python-jose | 3.5.0 | `jwk.JWK` class removed; use `jwk.construct()` instead |
 
 ---
 

@@ -32,7 +32,7 @@ class GeminiOcrProvider(OcrProvider):
     # Model name for transcription
     MODEL = "gemini-2.0-flash"
     # Model name for embeddings (separate, used elsewhere)
-    EMBEDDING_MODEL = "text-embedding-004"
+    EMBEDDING_MODEL = "gemini-embedding-001"
 
     def __init__(self) -> None:
         api_key = settings.GEMINI_API_KEY
@@ -113,7 +113,7 @@ class GeminiOcrProvider(OcrProvider):
                 vectors.append([0.0] * dim)
                 continue
             try:
-                response = genai.embed_content(model=f"models/{model_name}", content=text)
+                response = genai.embed_content(model=f"models/{model_name}", content=text, output_dimensionality=dim)
                 embedding = response.get("embedding", [0.0] * dim)
                 # Pad or truncate to expected dimension
                 if len(embedding) < dim:
