@@ -30,7 +30,7 @@ class GeminiOcrProvider(OcrProvider):
     """Uses Gemini 2.0 Flash multimodal to transcribe page images."""
 
     # Model name for transcription
-    MODEL = "gemini-2.0-flash"
+    MODEL = "gemini-3.8-flash"
     # Model name for embeddings (separate, used elsewhere)
     EMBEDDING_MODEL = "gemini-embedding-001"
 

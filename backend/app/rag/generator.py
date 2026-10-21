@@ -88,7 +88,7 @@ async def generate_answer(
         raise RuntimeError("GEMINI_API_KEY is not configured")
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-3.8-flash")
     
     # Build reference text
     if not retrieved_chunks:

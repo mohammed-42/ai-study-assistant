@@ -33,7 +33,11 @@ def _get_fitz():
 
 
 async def process_document(db: AsyncSession, document_id: str) -> None:
-    """Process a document: extract text, create pages, chunk, embed."""
+    """Process a document: extract text, create pages, chunk, embed.
+
+    Uses the passed-in database session. Callers are responsible for opening
+    and closing the session (e.g. tests that supply their own fixture session).
+    """
     doc = await _get_document(db, uuid.UUID(document_id))
     if doc is None:
         return
@@ -42,6 +46,9 @@ async def process_document(db: AsyncSession, document_id: str) -> None:
     await db.commit()
 
     try:
+        # Clear old pages/chunks for idempotent retries
+        await _clear_existing_pages_and_chunks(db, doc.id)
+
         if doc.doc_type == "pdf":
             await _process_pdf(db, doc)
         elif doc.doc_type in ("image", "multi_image"):
@@ -49,8 +56,26 @@ async def process_document(db: AsyncSession, document_id: str) -> None:
         else:
             raise ValueError(f"unknown doc_type: {doc.doc_type}")
 
+        # Create chunks from all pages, then embed them
+        pages_stmt = (
+            select(DocumentPage)
+            .where(DocumentPage.document_id == doc.id)
+            .order_by(DocumentPage.page_number)
+        )
+        pages_result = await db.execute(pages_stmt)
+        pages = list(pages_result.scalars().all())
+
+        if pages:
+            await create_chunks(db, doc.id, pages)
+            # Fetch newly created chunks for embedding
+            chunk_stmt = select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+            chunk_result = await db.execute(chunk_stmt)
+            chunks = list(chunk_result.scalars().all())
+            if chunks:
+                await embed_chunks(db, chunks)
+
         doc.status = "ready"
-        doc.page_count = await _count_pages(db, doc.id)
+        doc.page_count = len(pages)
 
     except Exception as exc:
         doc.status = "failed"
@@ -61,35 +86,137 @@ async def process_document(db: AsyncSession, document_id: str) -> None:
         await db.commit()
 
 
+async def process_document_background(document_id: str, db: AsyncSession | None = None) -> None:
+    """Background-task entry point for document processing.
+
+    When called from FastAPI BackgroundTasks (no db passed), creates its own
+    async session via get_session_maker() and ensures it is properly closed.
+    When called directly in tests (db passed), uses the provided session.
+
+    Errors are logged but not re-raised so the caller's response is not affected.
+    """
+    from app.db.base import get_session_maker
+
+    close_session = False
+    if db is None:
+        try:
+            session_maker = get_session_maker()
+            db = session_maker()
+            close_session = True
+        except Exception as exc:
+            logger.exception("Failed to create DB session for background processing of %s: %s", document_id, exc)
+            return
+
+    exc_raised: Exception | None = None
+    try:
+        await process_document(db, document_id)
+    except Exception as exc:
+        exc_raised = exc
+        logger.exception("Background processing failed for document %s: %s", document_id, exc)
+    finally:
+        if close_session and db is not None:
+            try:
+                await db.close()
+            except Exception:
+                pass
+            db = None
+        # Mark document as failed if an exception occurred and we still have a session
+        if exc_raised is not None and db is not None:
+            try:
+                from sqlalchemy import select as sa_select
+                from app.models.document import Document as DocModel
+                stmt = sa_select(DocModel).where(DocModel.id == uuid.UUID(document_id))
+                result = await db.execute(stmt)
+                doc = result.scalar_one_or_none()
+                if doc:
+                    doc.status = "failed"
+                    doc.error_message = str(exc_raised)[:2000]
+                    await db.commit()
+            except Exception:
+                logger.exception("Failed to mark document %s as failed", document_id)
+
+
 async def _get_document(db: AsyncSession, doc_id: uuid.UUID):
     stmt = select(Document).where(Document.id == doc_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def _process_pdf(db: AsyncSession, doc: Document) -> None:
-    """Extract text from PDF — uses text layer when available, OCR fallback."""
-    fitz = _get_fitz()
-    # TODO: Load PDF bytes from storage key
-    # For now this is a placeholder — real implementation needs storage access
-    page_count = 0  # Will be set from actual pages after processing
-
-    for page_num in range(page_count):
-        # TODO: Render page at ~200 DPI for OCR if no text layer
-        page_text = ""
-        source = "text_layer"
-        needs_review = False
-
-        page = DocumentPage(
-            document_id=doc.id,
-            page_number=page_num + 1,
-            text=page_text,
-            source=source,
-            needs_review=needs_review,
-        )
-        db.add(page)
-
+async def _clear_existing_pages_and_chunks(db: AsyncSession, doc_id: uuid.UUID) -> None:
+    """Remove old pages and chunks for idempotent retries."""
+    from sqlalchemy import delete
+    await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
+    await db.execute(delete(DocumentPage).where(DocumentPage.document_id == doc_id))
     await db.commit()
+
+
+async def _process_pdf(db: AsyncSession, doc: Document) -> None:
+    """Extract text from PDF using PyMuPDF text layer; falls back to OCR for blank pages."""
+    fitz = _get_fitz()
+
+    # Load PDF bytes from Supabase Storage
+    storage = _get_storage_client()
+    try:
+        pdf_bytes = storage.storage.from_(settings.STORAGE_BUCKET).download(doc.storage_key)
+    except Exception as exc:
+        logger.warning("Failed to download PDF from storage for doc %s: %s", doc.id, exc)
+        pdf_bytes = None
+
+    if pdf_bytes is None:
+        logger.warning("No PDF bytes available for doc %s — skipping text extraction", doc.id)
+        return
+
+    import io
+    try:
+        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception as exc:
+        logger.warning("Failed to open PDF for doc %s: %s", doc.id, exc)
+        return
+
+    try:
+        page_count = len(pdf_doc)
+        if page_count == 0:
+            logger.warning("PDF %s has 0 pages", doc.id)
+            return
+
+        for page_num in range(page_count):
+            page = pdf_doc[page_num]
+            text = page.get_text().strip()
+            source = "text_layer"
+            needs_review = False
+
+            # If text layer is empty, render page as image and OCR it
+            if not text:
+                try:
+                    mat = fitz.Matrix(2, 2)  # 2x zoom ≈ 144 DPI
+                    pix = page.get_pixmap(matrix=mat)
+                    img_bytes = pix.tobytes("png")
+                    ocr_provider = _get_ocr_provider()
+                    if ocr_provider:
+                        ocr_result = await ocr_provider.transcribe_page(img_bytes, "image/png")
+                        text = ocr_result.text
+                        source = "ocr"
+                        needs_review = flag_needs_review(ocr_result)
+                    else:
+                        text = ""
+                        needs_review = True
+                except Exception as exc:
+                    logger.warning("OCR fallback failed for page %d of doc %s: %s", page_num + 1, doc.id, exc)
+                    text = ""
+                    needs_review = True
+
+            doc_page = DocumentPage(
+                document_id=doc.id,
+                page_number=page_num + 1,
+                text=text,
+                source=source,
+                needs_review=needs_review,
+            )
+            db.add(doc_page)
+
+        await db.commit()
+    finally:
+        pdf_doc.close()
 
 
 async def _process_images(
@@ -182,13 +309,50 @@ def _get_ocr_provider() -> OcrProvider | None:
 async def _get_image_pages(
     db: AsyncSession, doc_id: uuid.UUID
 ) -> list[tuple[dict, bytes, str]]:
-    """Load image bytes and metadata for each page of an image/multi_image document.
+    """Load image bytes and metadata from Supabase Storage for an image/multi_image document."""
+    from app.core.config import settings
 
-    Returns list of (page_info_dict, image_bytes, mime_type).
-    TODO: Replace with actual storage reads once Supabase Storage is wired.
-    """
-    # Placeholder — returns empty list; real impl reads from storage_key
-    return []
+    # Find the document to get storage key prefix
+    doc_stmt = select(Document).where(Document.id == doc_id)
+    doc_result = await db.execute(doc_stmt)
+    doc = doc_result.scalar_one_or_none()
+    if not doc or not doc.storage_key:
+        logger.warning("No storage key for document %s", doc_id)
+        return []
+
+    # Parse prefix from storage_key (format: user/<owner_id>/<doc_id>/<filename>)
+    prefix = "/".join(doc.storage_key.split("/")[:4]) + "/"  # e.g. "user/<owner_id>/<doc_id>/"
+
+    storage = _get_storage_client()
+    try:
+        files = storage.storage.from_(settings.STORAGE_BUCKET).list(prefix)
+    except Exception as exc:
+        logger.warning("Storage list failed for %s: %s", prefix, exc)
+        return []
+
+    pages: list[tuple[dict, bytes, str]] = []
+    for f in sorted(files, key=lambda x: x.get("name", "")):
+        name = f.get("name", "")
+        if not name.startswith(prefix):
+            continue
+        try:
+            data = storage.storage.from_(settings.STORAGE_BUCKET).download(f"{prefix}{name}")
+            # Detect MIME from extension
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+            mime_type = mime_map.get(ext, f"image/{ext}")
+            pages.append(({"storage_key": f"{prefix}{name}"}, data, mime_type))
+        except Exception as exc:
+            logger.warning("Failed to download %s: %s", name, exc)
+
+    return pages
+
+
+def _get_storage_client():
+    """Return Supabase storage client (service role)."""
+    from app.core.config import settings
+    from supabase import create_client
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 
 async def _count_pages(db: AsyncSession, doc_id: uuid.UUID) -> int:

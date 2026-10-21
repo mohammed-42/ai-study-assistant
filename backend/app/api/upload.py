@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import io
+import logging
 import uuid
-from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Query, status
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.db.base import get_db
 from app.models.document import Document, DocumentStatus
 from app.models.profile import Profile
@@ -17,6 +20,13 @@ from app.models.subject import Subject
 from app.schemas.document import DocumentOut
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+def _get_storage_client():
+    """Return Supabase storage client (service role for server-side writes)."""
+    from app.core.config import settings
+    from supabase import create_client
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 # Configurable limits
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -33,6 +43,7 @@ async def upload_document(
     doc_type: str = "pdf",
     db: AsyncSession = Depends(get_db),
     user: Profile = Depends(get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     # Validate doc_type
     if doc_type not in ("pdf", "image", "multi_image"):
@@ -107,6 +118,22 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
-    # TODO: Store files in Supabase Storage and trigger processing job
+    # Upload to Supabase Storage
+    storage = _get_storage_client()
+    try:
+        for i, (filename, content, mime) in enumerate(contents):
+            key = f"user/{user.id}/{doc_id}/{i}_{filename}"
+            storage.storage.from_(settings.STORAGE_BUCKET).upload(key, content, file_options={"content-type": mime})
+        # Store first key for reference
+        doc.storage_key = f"user/{user.id}/{doc_id}/{0}_{contents[0][0]}"
+        await db.commit()
+        await db.refresh(doc)
+    except Exception as exc:
+        logger.warning("Supabase Storage upload failed for doc %s: %s", doc_id, exc)
+        # Still return the doc record; processing will handle missing files gracefully
+
+    # Trigger background processing (opens its own DB session, separate from request)
+    from app.services.processing import process_document_background
+    background_tasks.add_task(process_document_background, str(doc.id))
 
     return doc

@@ -86,7 +86,7 @@ async def test_gemini_provider_transcribe_success():
 
     assert result.text == "Transcribed text here"
     assert result.low_confidence is False
-    assert provider.name == "gemini-2.0-flash"
+    assert provider.name == "gemini-3.8-flash"
 
 
 @pytest.mark.asyncio

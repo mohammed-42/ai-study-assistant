@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_JWKS_URL: str = "https://api.supabase.com/auth/v1/keys"
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
 
     # Gemini
     GEMINI_API_KEY: str = ""

@@ -134,7 +134,7 @@ async def generate_quiz(
         raise RuntimeError("GEMINI_API_KEY is not configured")
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-3.8-flash")
 
     if not chunks:
         raise ValueError("No document chunks available to generate quiz questions")
