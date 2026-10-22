@@ -1,9 +1,10 @@
 import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest, Note, NoteCreate, Quiz, QuizAttempt, QuizSummary, QuizGenerateRequest, QuizSubmitRequest, StudyPlan, StudyPlanCreate, StudyPlanUpdate, StudyTask, StudyTaskUpdate, DashboardData } from '@/types'
+import { getAccessToken } from './supabase'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T | undefined> {
-  const token = localStorage.getItem('sb-auth-token') || sessionStorage.getItem('sb-auth-token')
+  const token = await getAccessToken()
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -18,7 +19,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: response.statusText }))
-    throw new Error(error.message || response.statusText)
+    throw new Error(typeof error.detail === 'string' ? error.detail : (error.message || response.statusText))
   }
 
   if (response.status === 204) return undefined as T
@@ -37,7 +38,7 @@ export const documentApi = {
   upload: async (file: File, subjectId: string, docType: string) => {
     const formData = new FormData()
     formData.append('file', file)
-    const token = localStorage.getItem('sb-auth-token') || sessionStorage.getItem('sb-auth-token')
+    const token = await getAccessToken()
     
     const response = await fetch(`${API_URL}/documents/upload?subject_id=${subjectId}&doc_type=${docType}`, {
       method: 'POST',
@@ -49,7 +50,7 @@ export const documentApi = {
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: response.statusText }))
-      throw new Error(error.message || response.statusText)
+      throw new Error(typeof error.detail === 'string' ? error.detail : (error.message || response.statusText))
     }
     return response.json() as Promise<AppDocument>
   },

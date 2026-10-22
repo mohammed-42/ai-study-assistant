@@ -7,11 +7,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables')
 }
 
+let _client: ReturnType<typeof createClient> | null = null
+
 export function createSupabaseClient() {
-  return createClient(supabaseUrl!, supabaseAnonKey!, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  })
+  if (!_client) {
+    _client = createClient(supabaseUrl!, supabaseAnonKey!, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+  }
+  return _client
+}
+
+export async function getAccessToken(): Promise<string | null> {
+  const client = createSupabaseClient()
+  const { data } = await client.auth.getSession()
+  return data.session?.access_token ?? null
 }

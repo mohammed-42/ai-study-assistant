@@ -540,3 +540,44 @@ ai-study-assistant/
 - `fix: Phase 7 audit — JWKS URL, _find_key bug, embedding model deprecation` (98c5405) — deps.py uses settings.SUPABASE_JWKS_URL (was hardcoded 404), jwk.JWK→jwk.construct (python-jose 3.5.0), gemini-embedding-001 replaces text-embedding-004, output_dimensionality=768. 90/90 tests passing.
 - `fix: Phase 7 step 2 — background task session isolation + Supabase Storage wiring` — process_document keeps original signature, new process_document_background wrapper with auto/session support, upload.py wires Storage + BackgroundTasks, 4 new tests. 94/94 tests passing.
 - `docs: update PROGRESS.md — Phase 7 integration audit findings` (98c5405) — records Phase 7 Step 1 fixes.
+---
+
+## Handoff — 2026-10-21 session stop
+
+### Two failing tests (95 pass, 3 fail before any changes)
+
+**1. `test_process_image_creates_chunks_and_embeddings`**
+- Asserts `refreshed.page_count == 1`, gets 0.
+- Root cause confirmed: `_get_image_pages()` parses `storage_key` into a 4-part prefix (`"user/<owner_id>/<doc_id>/"`). The test sets `storage_key="user/test/img.jpg"` — a flat file path, not a directory-style prefix. The list call returns `[{"name": "user/test/img.jpg"}]` but the prefix `"user/test/img.jpg/"` does not match, so `image_pages` is empty and `_process_images()` returns early. Fix: change test `storage_key` to directory-style, e.g. `"user/<test_user_id>/<doc_id>/"`.
+
+**2. `test_process_document_retry_clears_old_data`**
+- Asserts 1 page with text `"Fresh content after retry."` after `process_document()`, gets 0 pages (`IndexError`).
+- Evidence gathered:
+  - In-process standalone reproduction (same fixture setup, no pytest): passes every time (page_count=1, text correct).
+  - In isolation (`-k test_process_document_retry_clears_old_data`): FAILS.
+  - Paired with `test_process_pdf_creates_chunks_and_embeddings` (which also patches `_get_storage_client`): the retry test FAILS while the PDF test PASSES.
+  - Debug prints show: `_process_pdf` commits 0 new pages, `finally` block commits with `page_count=1` — but when queried again in the test, 0 rows exist.
+  - Hypothesis: `process_document()` or a helper (likely `embed_chunks()` which calls `gemini.embed_content`) opens a secondary session via `get_session_maker()` that shares the same in-memory SQLite connection (StaticPool). When that second session closes/rolls back, it invalidates the first session's transaction, causing the pages to vanish from the original session's view. Needs further investigation with `echo=True` engine SQL trace.
+- Time-boxed; marked for follow-up. Will not weaken assertion.
+
+**3. `test_embedding_model_is_valid_name`** (also failing)
+- `.env` has `EMBEDDING_MODEL=gemini-3.5-flash` which is not in the valid set `{"gemini-embedding-001", "gemini-embedding-2-preview", "gemini-embedding-2"}`.
+- Also `gemini-3.8-flash` is hardcoded in 5 files as the generative model ID — not a valid Gemini model.
+
+### Confirmed facts
+- `gemini-3.8-flash` is not a valid Gemini model ID. Real model IDs for generation: `gemini-2.0-flash` / `gemini-2.5-flash`. The project should use a single `GEMINI_MODEL` setting (default `gemini-3.5-flash` per instructions, or a real model) read from `.env`.
+- `gemini-3.5-flash` is also not a valid Gemini embedding model — embedding models are `gemini-embedding-001`, `gemini-embedding-2-preview`, `gemini-embedding-2`.
+- Supabase DB URLs in `.env` are set to the Tokyo pooler (`aws-0-ap-northeast-1.pooler.supabase.com:5432`). The async pooler port is 5432; the transaction pooler would be on a different port.
+- Tests must be hermetic: `conftest.py` already forces `DATABASE_URL`, `DATABASE_URL_SYNC` to `sqlite+aiosqlite:///:memory:` and `GEMINI_API_KEY=test-gemini-key`. No test should ever touch the live Supabase DB or real Gemini key. The `test_embedding_model_is_valid_name` test reads settings at import time — conftest env vars are set before the import, so it should pick up `test-gemini-key` and `EMBEDDING_MODEL` from the override. Need to verify the config picks up the test override correctly.
+
+### Remaining todo (in order)
+1. Fix `test_process_image_creates_chunks_and_embeddings` — change `storage_key` to directory-style prefix matching `_get_image_pages()` parsing logic.
+2. Fix `test_process_document_retry_clears_old_data` — diagnose session isolation bug in `embed_chunks()` / `gemini.embed_content`; add pytest.mark.xfail if root cause requires deeper tracing.
+3. Fix `test_embedding_model_is_valid_name` — update test to use correct valid set or fix env to set a valid model; also fix conftest to set `EMBEDDING_MODEL=gemini-embedding-001`.
+4. Replace hardcoded `gemini-3.8-flash` in 5 files with single `GEMINI_MODEL` config from `app/core/config.py`, default `gemini-3.5-flash`.
+5. Write `backend/scripts/check_db.py` (asyncpg, `SELECT 1`, masked output, pass/fail).
+6. Run `python -m alembic upgrade head` if DB check passes; list tables.
+7. Live smoke test with `samples/sample.pdf` and `samples/handwritten.jpeg`.
+8. Phase 7: signed URLs for page images, Storage cleanup on delete, rate limiting on chat/notes/quizzes, README fixes.
+9. Fix `backend/.env.example` — correct `SUPABASE_JWKS_URL`, add `DATABASE_URL_SYNC`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_MODEL`, set `EMBEDDING_MODEL=gemini-embedding-001`.
+
