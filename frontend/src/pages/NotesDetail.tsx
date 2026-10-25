@@ -72,6 +72,7 @@ export default function NotesDetail() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              aria-label="Note title"
               className="text-2xl font-bold flex-1 mr-4 bg-background border rounded px-2 py-1"
             />
           ) : (
@@ -84,6 +85,7 @@ export default function NotesDetail() {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              aria-label="Note content"
               className="w-full min-h-[300px] p-4 rounded-md border bg-background text-sm leading-relaxed"
             />
           ) : (

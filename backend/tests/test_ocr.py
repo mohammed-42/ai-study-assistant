@@ -81,12 +81,15 @@ async def test_gemini_provider_transcribe_success():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_TIMEOUT_SECONDS = 60
+        mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
         result = await provider.transcribe_page(b"fake-image-bytes", "image/jpeg")
 
     assert result.text == "Transcribed text here"
     assert result.low_confidence is False
-    assert provider.name == "gemini-3.8-flash"
+    assert provider.name == "gemini-2.5-flash"
 
 
 @pytest.mark.asyncio
@@ -103,6 +106,9 @@ async def test_gemini_provider_transcribe_no_text():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_TIMEOUT_SECONDS = 60
+        mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
         result = await provider.transcribe_page(b"fake-image-bytes", "image/png")
 
@@ -121,6 +127,9 @@ async def test_gemini_provider_transcribe_error_returns_low_conf():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_TIMEOUT_SECONDS = 60
+        mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
         result = await provider.transcribe_page(b"fake-image-bytes", "image/jpeg")
 

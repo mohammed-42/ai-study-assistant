@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/services/api'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft } from 'lucide-react'
 import type { Subject } from '@/types'
@@ -50,7 +50,7 @@ export default function SubjectDetail() {
         </Button>
       </Link>
 
-      <Card>
+      <Card className="gap-4 p-6">
         <CardHeader>
           <CardTitle className="text-2xl">{subject.name}</CardTitle>
         </CardHeader>
@@ -58,10 +58,16 @@ export default function SubjectDetail() {
           {subject.description && (
             <p className="text-muted-foreground">{subject.description}</p>
           )}
-          <div className="mt-6 flex gap-3">
-            <Button variant="outline" disabled>Documents (coming soon)</Button>
-            <Button variant="outline" disabled>Tutor (coming soon)</Button>
-            <Button variant="outline" disabled>Quizzes (coming soon)</Button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link to="/documents" className={buttonVariants({ variant: 'outline' })}>
+              Documents
+            </Link>
+            <Link to="/tutor" className={buttonVariants({ variant: 'outline' })}>
+              Tutor
+            </Link>
+            <Link to="/quizzes" className={buttonVariants({ variant: 'outline' })}>
+              Quizzes
+            </Link>
           </div>
         </CardContent>
       </Card>

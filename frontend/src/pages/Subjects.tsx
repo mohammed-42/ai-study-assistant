@@ -126,7 +126,17 @@ export default function Subjects() {
                 </div>
               </CardContent>
               <div className="flex items-center gap-2 pr-6">
-                <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(subject.id)} title="Delete subject">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    if (confirm(`Delete subject "${subject.name}"?`)) {
+                      deleteMutation.mutate(subject.id)
+                    }
+                  }}
+                  title="Delete subject"
+                  aria-label={`Delete subject ${subject.name}`}
+                >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </div>

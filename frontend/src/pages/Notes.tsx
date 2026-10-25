@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useNotes, useGenerateNote } from '@/hooks/use-notes'
+import { useNotes, useGenerateNote, useDeleteNote } from '@/hooks/use-notes'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +32,7 @@ export default function Notes({ subjectId }: NotesProps) {
   const navigate = useNavigate()
   const { data: notes, isLoading } = useNotes(subjectId)
   const generateNote = useGenerateNote()
+  const deleteNote = useDeleteNote()
   const [generateOpen, setGenerateOpen] = useState(false)
   const [generateParams, setGenerateParams] = useState<{ note_type: NoteType; title: string }>({
     note_type: 'summary',
@@ -111,7 +112,17 @@ export default function Notes({ subjectId }: NotesProps) {
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/notes/${note.id}`)}>
                   <Pencil className="mr-1 h-3 w-3" /> View
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => { /* delete handled by hook */ }}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Delete note ${note.title}`}
+                  disabled={deleteNote.isPending}
+                  onClick={() => {
+                    if (confirm(`Delete note "${note.title}"?`)) {
+                      deleteNote.mutate(note.id)
+                    }
+                  }}
+                >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </CardFooter>

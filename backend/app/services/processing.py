@@ -225,7 +225,6 @@ async def _process_images(
     ocr_provider: OcrProvider | None = None,
 ) -> None:
     """Process uploaded images — runs OCR on each image page."""
-    # TODO: Load image bytes from storage keys
     # Placeholder: iterate over doc's pages (already stored as image references)
     image_pages = await _get_image_pages(db, doc.id)
 
@@ -320,28 +319,30 @@ async def _get_image_pages(
         logger.warning("No storage key for document %s", doc_id)
         return []
 
-    # Parse prefix from storage_key (format: user/<owner_id>/<doc_id>/<filename>)
-    prefix = "/".join(doc.storage_key.split("/")[:4]) + "/"  # e.g. "user/<owner_id>/<doc_id>/"
+    # storage_key is a file key (format: user/<owner_id>/<doc_id>/<filename>);
+    # list() takes the containing folder, while returned names are relative to it.
+    folder = doc.storage_key.rsplit("/", 1)[0]
 
     storage = _get_storage_client()
     try:
-        files = storage.storage.from_(settings.STORAGE_BUCKET).list(prefix)
+        files = storage.storage.from_(settings.STORAGE_BUCKET).list(folder)
     except Exception as exc:
-        logger.warning("Storage list failed for %s: %s", prefix, exc)
+        logger.warning("Storage list failed for %s: %s", folder, exc)
         return []
 
     pages: list[tuple[dict, bytes, str]] = []
     for f in sorted(files, key=lambda x: x.get("name", "")):
         name = f.get("name", "")
-        if not name.startswith(prefix):
+        if not name:
             continue
         try:
-            data = storage.storage.from_(settings.STORAGE_BUCKET).download(f"{prefix}{name}")
+            storage_key = f"{folder}/{name}"
+            data = storage.storage.from_(settings.STORAGE_BUCKET).download(storage_key)
             # Detect MIME from extension
             ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
             mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
             mime_type = mime_map.get(ext, f"image/{ext}")
-            pages.append(({"storage_key": f"{prefix}{name}"}, data, mime_type))
+            pages.append(({"storage_key": storage_key}, data, mime_type))
         except Exception as exc:
             logger.warning("Failed to download %s: %s", name, exc)
 
@@ -471,6 +472,28 @@ async def re_embed_page(db: AsyncSession, page_id: uuid.UUID, new_text: str) -> 
     chunk_stmt = select(DocumentChunk).where(DocumentChunk.document_id == doc_id)
     all_chunks = (await db.execute(chunk_stmt)).scalars().all()
     await embed_chunks(db, list(all_chunks))
+
+
+async def re_embed_page_background(
+    page_id: uuid.UUID,
+    new_text: str,
+    db: AsyncSession | None = None,
+) -> None:
+    """Background entry point that owns its DB session when none is supplied."""
+    from app.db.base import get_session_maker
+
+    close_session = False
+    if db is None:
+        db = get_session_maker()()
+        close_session = True
+
+    try:
+        await re_embed_page(db, page_id, new_text)
+    except Exception:
+        logger.exception("Background re-embedding failed for page %s", page_id)
+    finally:
+        if close_session:
+            await db.close()
 
 
 # Imports needed at runtime (avoid circular)

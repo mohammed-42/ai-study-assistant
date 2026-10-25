@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -12,6 +11,7 @@ import google.generativeai as genai
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import settings
+from app.core.resilience import call_with_retry
 from app.models.document_chunk import DocumentChunk
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ async def generate_quiz(
         raise RuntimeError("GEMINI_API_KEY is not configured")
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-3.8-flash")
+    model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
     if not chunks:
         raise ValueError("No document chunks available to generate quiz questions")
@@ -151,10 +151,12 @@ async def generate_quiz(
     full_prompt = f"{prompt}\n\nMATERIALS:\n{references}"
 
     try:
-        response = await asyncio.to_thread(
+        response = await call_with_retry(
             model.generate_content,
             full_prompt,
             generation_config={"temperature": 0.3, "response_mime_type": "application/json"},
+            timeout=settings.GEMINI_TIMEOUT_SECONDS,
+            retries=settings.GEMINI_MAX_RETRIES,
         )
 
         text = response.text.strip()

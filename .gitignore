@@ -30,6 +30,7 @@ dist/
 .env.local
 .env.*.local
 .env.smoke
+.env.test
 
 # IDE
 .idea/
@@ -45,6 +46,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+backend/logs/
 
 # Docker
 docker-compose.override.yml
@@ -56,4 +58,4 @@ alembic/versions/*.py
 # Misc
 *.tmp
 *.bak
-.backend/samples/
+backend/samples/

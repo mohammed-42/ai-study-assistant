@@ -7,7 +7,9 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["DATABASE_URL_SYNC"] = "sqlite:///:memory:"
 os.environ["SUPABASE_URL"] = "https://test.supabase.co"
 os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
+os.environ["SUPABASE_JWKS_URL"] = "https://test.supabase.co/auth/v1/.well-known/jwks.json"
 os.environ["GEMINI_API_KEY"] = "test-gemini-key"
+os.environ["EMBEDDING_MODEL"] = "gemini-embedding-001"
 
 from app.db.base import Base, reset_db_for_testing  # noqa: E402
 from app.models.profile import Profile  # noqa: E402

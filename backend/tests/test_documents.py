@@ -407,11 +407,14 @@ async def test_process_image_creates_chunks_and_embeddings(db_session, test_user
     from app.services.processing import process_document
     from app.models.document_chunk import DocumentChunk
 
-    doc = Document(owner_id=test_user.id, subject_id=test_subject.id, name="ImgTest.jpg", doc_type="image", status=DocumentStatus.UPLOADED, storage_key="user/test/img.jpg")
+    doc = Document(owner_id=test_user.id, subject_id=test_subject.id, name="ImgTest.jpg", doc_type="image", status=DocumentStatus.UPLOADED)
     db_session.add(doc)
     await db_session.commit()
     await db_session.refresh(doc)
     doc_id = str(doc.id)
+    folder = f"user/{test_user.id}/{doc_id}"
+    doc.storage_key = f"{folder}/0_img.jpg"
+    await db_session.commit()
 
     # Mock storage to return a valid PNG image (1x1 pixel)
     import io
@@ -423,15 +426,15 @@ async def test_process_image_creates_chunks_and_embeddings(db_session, test_user
     png_data = img_bytes.read()
 
     mock_storage = MagicMock()
-    mock_storage.storage.from_("documents").list.return_value = [{"name": "user/test/img.jpg"}]
+    mock_storage.storage.from_("documents").list.return_value = [{"name": "0_img.jpg"}]
     mock_storage.storage.from_("documents").download.return_value = png_data
     monkeypatch.setattr("app.services.processing._get_storage_client", lambda: mock_storage)
 
     # Mock OCR provider to return deterministic text
     from app.ai.ocr import OcrResult, OcrQuality
     mock_provider = MagicMock()
-    mock_provider.transcribe_page = MagicMock(return_value=OcrResult(text="Test OCR text content for chunking.", quality=OcrQuality.HIGH, flags=[], low_confidence=False))
-    mock_provider.embed_texts = MagicMock(return_value=[[0.1] * 768])
+    mock_provider.transcribe_page = AsyncMock(return_value=OcrResult(text="Test OCR text content for chunking.", quality=OcrQuality.HIGH, flags=[], low_confidence=False))
+    mock_provider.embed_texts = AsyncMock(return_value=[[0.1] * 768])
     monkeypatch.setattr("app.services.processing._get_ocr_provider", lambda: mock_provider)
 
     await process_document(db_session, doc_id)
@@ -441,7 +444,13 @@ async def test_process_image_creates_chunks_and_embeddings(db_session, test_user
     assert refreshed.page_count == 1
 
     pages = await db_session.execute(select(DocumentPage).where(DocumentPage.document_id == doc.id))
-    assert len(list(pages.scalars().all())) == 1
+    page_list = list(pages.scalars().all())
+    assert len(page_list) == 1
+    assert page_list[0].page_image_key == f"{folder}/0_img.jpg"
+
+    storage_api = mock_storage.storage.from_.return_value
+    storage_api.list.assert_called_once_with(folder)
+    storage_api.download.assert_called_once_with(f"{folder}/0_img.jpg")
 
     chunks = await db_session.execute(select(DocumentChunk).where(DocumentChunk.document_id == doc.id))
     chunk_list = list(chunks.scalars().all())
@@ -509,8 +518,9 @@ async def test_process_document_retry_clears_old_data(db_session, test_user, tes
 
     # Old stale page should be gone
     pages = await db_session.execute(select(DP).where(DP.document_id == doc.id))
-    assert len(list(pages.scalars().all())) == 1
-    assert list(pages.scalars().all())[0].text == "Fresh content after retry."
+    page_list = list(pages.scalars().all())
+    assert len(page_list) == 1
+    assert page_list[0].text == "Fresh content after retry."
 
 
 @pytest.mark.asyncio

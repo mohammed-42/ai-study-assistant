@@ -12,6 +12,7 @@ from google.generativeai.types import answer_types
 
 from app.ai.ocr import OcrProvider, OcrResult, OcrQuality
 from app.core.config import settings
+from app.core.resilience import call_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,6 @@ Transcribe the following image exactly as written. Follow these rules:
 class GeminiOcrProvider(OcrProvider):
     """Uses Gemini 2.0 Flash multimodal to transcribe page images."""
 
-    # Model name for transcription
-    MODEL = "gemini-3.8-flash"
     # Model name for embeddings (separate, used elsewhere)
     EMBEDDING_MODEL = "gemini-embedding-001"
 
@@ -42,11 +41,12 @@ class GeminiOcrProvider(OcrProvider):
                 "Set it in your .env file to use the Gemini OCR provider."
             )
         genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(self.MODEL)
+        self._model_name = settings.GEMINI_MODEL
+        self._model = genai.GenerativeModel(self._model_name)
 
     @property
     def name(self) -> str:
-        return self.MODEL
+        return self._model_name
 
     async def transcribe_page(self, image_bytes: bytes, mime_type: str) -> OcrResult:
         """Transcribe a single page image using Gemini vision.
@@ -59,9 +59,12 @@ class GeminiOcrProvider(OcrProvider):
             blob = protos.Blob(mime_type=mime_type, data=image_bytes)
             part = protos.Part(inline_data=blob)
 
-            response = self._model.generate_content(
+            response = await call_with_retry(
+                self._model.generate_content,
                 [_TRANSCRIBE_PROMPT, part],
                 generation_config={"max_output_tokens": 2048, "temperature": 0.0},
+                timeout=settings.GEMINI_TIMEOUT_SECONDS,
+                retries=settings.GEMINI_MAX_RETRIES,
             )
 
             text = response.text.strip() if response.text else ""
@@ -113,7 +116,14 @@ class GeminiOcrProvider(OcrProvider):
                 vectors.append([0.0] * dim)
                 continue
             try:
-                response = genai.embed_content(model=f"models/{model_name}", content=text, output_dimensionality=dim)
+                response = await call_with_retry(
+                    genai.embed_content,
+                    model=f"models/{model_name}",
+                    content=text,
+                    output_dimensionality=dim,
+                    timeout=settings.GEMINI_TIMEOUT_SECONDS,
+                    retries=settings.GEMINI_MAX_RETRIES,
+                )
                 embedding = response.get("embedding", [0.0] * dim)
                 # Pad or truncate to expected dimension
                 if len(embedding) < dim:

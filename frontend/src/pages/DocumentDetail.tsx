@@ -141,6 +141,7 @@ export default function DocumentDetail() {
                         size="sm"
                         className="h-7 w-7 p-0"
                         onClick={() => startEdit(page)}
+                        aria-label={`Edit text for page ${page.page_number}`}
                       >
                         <Pencil className="h-3 w-3" />
                       </Button>
@@ -152,6 +153,7 @@ export default function DocumentDetail() {
                         className="w-full min-h-[100px] rounded-md border p-2 text-sm"
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
+                        aria-label={`OCR text for page ${page.page_number}`}
                       />
                       <div className="flex gap-2">
                         <Button size="sm" onClick={saveEdit} disabled={editPageMutation.isPending}>

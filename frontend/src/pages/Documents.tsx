@@ -60,7 +60,7 @@ export default function Documents() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table aria-label="Your documents">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>

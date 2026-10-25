@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -12,6 +11,7 @@ import google.generativeai as genai
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.resilience import call_with_retry
 from app.rag.retriever import RetrievalResult
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def generate_answer(
         raise RuntimeError("GEMINI_API_KEY is not configured")
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-3.8-flash")
+    model = genai.GenerativeModel(settings.GEMINI_MODEL)
     
     # Build reference text
     if not retrieved_chunks:
@@ -121,10 +121,12 @@ async def generate_answer(
     ) + history_context
     
     try:
-        response = await asyncio.to_thread(
+        response = await call_with_retry(
             model.generate_content,
             prompt,
-            generation_config={"temperature": 0.1, "response_mime_type": "application/json"}
+            generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
+            timeout=settings.GEMINI_TIMEOUT_SECONDS,
+            retries=settings.GEMINI_MAX_RETRIES,
         )
         
         text = response.text.strip()

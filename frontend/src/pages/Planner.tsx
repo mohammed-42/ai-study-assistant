@@ -195,6 +195,7 @@ export default function Planner() {
                     size="sm"
                     className="text-destructive hover:text-destructive"
                     disabled={deletePlan.isPending}
+                    aria-label={`Delete study plan ${plan.title}`}
                     onClick={async () => {
                       if (confirm('Delete this study plan and all its tasks?')) {
                         await deletePlan.mutateAsync(plan.id)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
@@ -13,7 +14,10 @@ from app.models.document_page import DocumentPage
 from app.models.document_chunk import DocumentChunk
 from app.models.processing_job import ProcessingJob
 from app.models.profile import Profile
-from app.schemas.document import DocumentOut, DocumentPageOut, DocumentChunkOut
+from app.schemas.document import DocumentCreate, DocumentOut, DocumentPageOut, DocumentChunkOut
+from app.services.storage import delete_document_objects
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -125,7 +129,14 @@ async def delete_document(
     user: Profile = Depends(get_current_user),
 ):
     doc = await _get_owner_document(db, UUID(document_id), user.id)
-    # Delete in order: chunks → pages → storage key (storage handled separately)
+
+    # Remove private storage objects first; DB deletion still proceeds if
+    # storage is unavailable so users are never stuck with undeletable rows.
+    try:
+        delete_document_objects(user.id, doc.id, doc.storage_key)
+    except Exception as exc:
+        logger.warning("Storage cleanup failed for document %s: %s", doc.id, exc)
+
     from sqlalchemy import delete
     await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc.id))
     await db.execute(delete(DocumentPage).where(DocumentPage.document_id == doc.id))

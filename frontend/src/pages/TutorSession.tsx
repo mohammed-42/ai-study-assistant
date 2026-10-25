@@ -67,7 +67,7 @@ export default function TutorSession() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-auto p-6 space-y-4">
+      <div className="flex-1 overflow-auto p-6 space-y-4" aria-live="polite">
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
@@ -113,6 +113,7 @@ export default function TutorSession() {
             placeholder="Ask about your study materials..."
             disabled={sendMutation.isPending}
             className="flex-1"
+            aria-label="Ask a question about your study materials"
           />
           <Button type="submit" disabled={sendMutation.isPending || !input.trim()}>
             {sendMutation.isPending ? (

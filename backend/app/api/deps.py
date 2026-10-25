@@ -26,8 +26,18 @@ async def _get_jwks() -> dict[str, Any]:
     if now < _jwks_expires and _jwks_cache:
         return _jwks_cache
 
+    jwks_url = settings.SUPABASE_JWKS_URL
+    if not jwks_url or "api.supabase.com" in jwks_url:
+        base = (settings.SUPABASE_URL or "").rstrip("/")
+        if not base:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="SUPABASE_URL or SUPABASE_JWKS_URL must be configured",
+            )
+        jwks_url = f"{base}/auth/v1/.well-known/jwks.json"
+
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(settings.SUPABASE_JWKS_URL)
+        resp = await client.get(jwks_url)
         resp.raise_for_status()
         data = resp.json()
 

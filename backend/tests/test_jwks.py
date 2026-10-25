@@ -11,10 +11,10 @@ class TestJwksUrl:
     """Verify the JWKS URL comes from settings, not hardcoded."""
 
     def test_jwks_url_from_settings_not_hardcoded(self):
-        """get_current_user must use settings.SUPABASE_JWKS_URL, not a static URL."""
+        """_get_jwks must use settings.SUPABASE_JWKS_URL, not a static URL."""
         import app.api.deps as deps_module
         import inspect
-        source = inspect.getsource(deps_module.get_current_user)
+        source = inspect.getsource(deps_module._get_jwks)
         # The old bug hardcoded the API-supabase.com URL
         assert "api.supabase.com/auth/v1/keys" not in source, (
             "deps.py still uses hardcoded JWKS URL — should use settings.SUPABASE_JWKS_URL"

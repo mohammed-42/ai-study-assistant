@@ -82,9 +82,10 @@ export default function Tutor() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-8 w-8 p-0 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                   onClick={(e) => handleDelete(e, session.id)}
                   disabled={deleteMutation.isPending}
+                  aria-label={`Delete chat session ${session.title}`}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>

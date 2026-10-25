@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -15,13 +18,21 @@ class Settings(BaseSettings):
     # Supabase
     SUPABASE_URL: str = ""
     SUPABASE_ANON_KEY: str = ""
-    SUPABASE_JWKS_URL: str = "https://api.supabase.com/auth/v1/keys"
+    SUPABASE_JWKS_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
     # Gemini
     GEMINI_API_KEY: str = ""
-    EMBEDDING_MODEL: str = "text-embedding-004"
+    GEMINI_MODEL: str = "gemini-3.6-flash"
+    GEMINI_TIMEOUT_SECONDS: int = 60
+    GEMINI_MAX_RETRIES: int = 2
+    EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
+
+    # Per-user rate limits (requests per minute; 0 disables)
+    RATE_LIMIT_UPLOADS_PER_MINUTE: int = 10
+    RATE_LIMIT_AI_PER_MINUTE: int = 20
+    RATE_LIMIT_PROCESSING_PER_MINUTE: int = 10
 
     # Storage
     STORAGE_BUCKET: str = "documents"
@@ -33,6 +44,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "AI Study Assistant"
+    ENVIRONMENT: str = "development"
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     @property
@@ -44,6 +56,26 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         extra = "ignore"
         validate_on_init = False
+
+
+def validate_runtime_config(s: Settings | None = None) -> list[str]:
+    """Return missing required settings; fail fast in production."""
+    cfg = s or get_settings_instance()
+    missing: list[str] = []
+    if not cfg.SUPABASE_URL:
+        missing.append("SUPABASE_URL")
+    if not cfg.SUPABASE_SERVICE_ROLE_KEY:
+        missing.append("SUPABASE_SERVICE_ROLE_KEY")
+    if not cfg.GEMINI_API_KEY:
+        missing.append("GEMINI_API_KEY")
+
+    if cfg.ENVIRONMENT.lower() in {"production", "prod"} and missing:
+        raise RuntimeError(
+            "Missing required production configuration: " + ", ".join(missing)
+        )
+    for name in missing:
+        logger.warning("%s is not set; related features will be unavailable", name)
+    return missing
 
 
 def get_settings() -> Settings:

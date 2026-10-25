@@ -1,10 +1,16 @@
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+# Load backend/.env so DATABASE_URL_SYNC is available when Alembic is run
+# from any working directory. Existing process env vars take precedence.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 config = context.config
 
@@ -21,10 +27,18 @@ from app.models.processing_job import ProcessingJob  # noqa: E402
 
 target_metadata = Base.metadata
 
-# Use SYNC database URL for alembic
-database_url = os.getenv("DATABASE_URL_SYNC") or os.getenv("DATABASE_URL", "").replace("postgresql+asyncpg://", "postgresql://").replace("sqlite+aiosqlite://", "sqlite://")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+# Use SYNC database URL for alembic. DATABASE_URL_SYNC from backend/.env wins;
+# DATABASE_URL is only a fallback for async drivers that need conversion.
+database_url = os.getenv("DATABASE_URL_SYNC") or os.getenv(
+    "DATABASE_URL", ""
+).replace("postgresql+asyncpg://", "postgresql://").replace(
+    "sqlite+aiosqlite://", "sqlite://"
+)
+if not database_url:
+    raise RuntimeError(
+        "DATABASE_URL_SYNC is not set. Configure it in backend/.env before running Alembic."
+    )
+config.set_main_option("sqlalchemy.url", database_url)
 
 
 def run_migrations_offline() -> None:

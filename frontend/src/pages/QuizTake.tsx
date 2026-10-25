@@ -171,8 +171,10 @@ export default function QuizTake() {
                   {q.options.map((opt, i) => (
                     <button
                       key={i}
+                      type="button"
+                      aria-pressed={answers[q.id] === i}
                       onClick={() => handleSelect(q.id, i)}
-                      className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
+                      className={`w-full text-left px-4 py-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                         answers[q.id] === i
                           ? 'border-primary bg-primary/10'
                           : 'border-border hover:bg-accent'
@@ -187,6 +189,7 @@ export default function QuizTake() {
                   value={(answers[q.id] as string) ?? ''}
                   onChange={(e) => handleTextChange(q.id, e.target.value)}
                   placeholder="Type your answer here..."
+                  aria-label={`Answer for question ${idx + 1}`}
                   className="w-full min-h-[100px] p-3 rounded-md border bg-background text-sm"
                 />
               )}

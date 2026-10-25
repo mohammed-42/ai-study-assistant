@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import enforce_rate_limit
 from app.db.base import get_db
 from app.models.quiz import Quiz, QuizQuestion, QuizAttempt, QuizResponse, QuizStatus
 from app.models.note import Note
@@ -85,6 +86,7 @@ async def generate_quiz(
     user: Profile = Depends(get_current_user),
 ):
     """Generate a quiz from document chunks using Gemini."""
+    await enforce_rate_limit("ai", user.id, "RATE_LIMIT_AI_PER_MINUTE")
     from app.services.quizzes import generate_quiz as gen_quiz_svc
 
     # Resolve document

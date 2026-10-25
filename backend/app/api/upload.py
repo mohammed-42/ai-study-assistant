@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.config import settings
+from app.core.rate_limit import enforce_rate_limit
 from app.db.base import get_db
 from app.models.document import Document, DocumentStatus
 from app.models.profile import Profile
@@ -45,6 +46,8 @@ async def upload_document(
     user: Profile = Depends(get_current_user),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    await enforce_rate_limit("uploads", user.id, "RATE_LIMIT_UPLOADS_PER_MINUTE")
+
     # Validate doc_type
     if doc_type not in ("pdf", "image", "multi_image"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid doc_type")

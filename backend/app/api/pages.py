@@ -5,18 +5,20 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import enforce_rate_limit
 from app.db.base import get_db
 from app.models.document import Document
 from app.models.document_page import DocumentPage
 from app.models.profile import Profile
 from app.schemas.document import DocumentPageOut
-from app.services.processing import re_embed_page
+from app.services.processing import re_embed_page_background
+from app.services.storage import create_signed_url
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +39,11 @@ async def edit_page(
     body: PageEditRequest,
     db: AsyncSession = Depends(get_db),
     user: Profile = Depends(get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> DocumentPage:
     """Edit OCR text for a page and trigger re-embedding."""
+    await enforce_rate_limit("ai", user.id, "RATE_LIMIT_AI_PER_MINUTE")
+
     doc_stmt = select(Document).where(
         Document.id == uuid.UUID(document_id),
         Document.owner_id == user.id,
@@ -61,11 +66,51 @@ async def edit_page(
     await db.commit()
     await db.refresh(page)
 
-    # Re-chunk and re-embed in background
-    try:
-        import asyncio
-        asyncio.create_task(re_embed_page(db, page.id, body.text))  # noqa: RUF006 — fire-and-forget
-    except Exception as exc:
-        logger.warning("Re-embed task failed: %s", exc)
+    background_tasks.add_task(re_embed_page_background, page.id, body.text)
 
     return page
+
+
+@router.get("/{page_id}/image-url")
+async def get_page_image_url(
+    document_id: str,
+    page_id: str,
+    expires_in: int = Query(3600, ge=60, le=3600),
+    db: AsyncSession = Depends(get_db),
+    user: Profile = Depends(get_current_user),
+):
+    """Return a short-lived signed URL for a private page image."""
+    doc_stmt = select(Document).where(
+        Document.id == uuid.UUID(document_id),
+        Document.owner_id == user.id,
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+
+    page = await db.get(DocumentPage, uuid.UUID(page_id))
+    if page is None or page.document_id != doc.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="page not found")
+    if not page.page_image_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="page image not found")
+    if not page.page_image_key.startswith(f"user/{user.id}/"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="page image is not owned by user",
+        )
+
+    try:
+        url = create_signed_url(page.page_image_key, expires_in)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.warning("Signed URL generation failed for page %s: %s", page.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not create a signed image URL",
+        ) from exc
+
+    return {"url": url, "expires_in": expires_in}

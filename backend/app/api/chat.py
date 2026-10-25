@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import enforce_rate_limit
 from app.db.base import get_db
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
@@ -143,6 +144,7 @@ async def post_message(
     user: Profile = Depends(get_current_user),
 ):
     """Post a user message and get an AI-generated response with citations."""
+    await enforce_rate_limit("ai", user.id, "RATE_LIMIT_AI_PER_MINUTE")
     session = await _get_owner_session(db, uuid.UUID(session_id), user.id)
     
     # Save user message
@@ -224,6 +226,7 @@ async def stream_message(
     user: Profile = Depends(get_current_user),
 ):
     """Stream a user message and get a streaming AI response."""
+    await enforce_rate_limit("ai", user.id, "RATE_LIMIT_AI_PER_MINUTE")
     session = await _get_owner_session(db, uuid.UUID(session_id), user.id)
     
     # Save user message

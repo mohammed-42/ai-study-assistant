@@ -47,6 +47,12 @@ export default function Layout() {
 
   return (
     <SidebarProvider>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:shadow"
+      >
+        Skip to main content
+      </a>
       <div className="flex h-screen w-full">
         <Sidebar>
           <SidebarHeader className="border-b px-6 py-4">
@@ -112,18 +118,24 @@ export default function Layout() {
               <span className="text-sm text-muted-foreground truncate max-w-[180px]">
                 {user?.email?.split('@')[0]}
               </span>
-              <Button variant="ghost" size="sm" onClick={handleSignOut} title="Sign out">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                title="Sign out"
+                aria-label="Sign out"
+              >
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </SidebarFooter>
         </Sidebar>
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <header className="border-b px-6 py-3 flex items-center gap-4">
             <SidebarTrigger />
             <h1 className="text-lg font-semibold">{getHeading()}</h1>
           </header>
-          <main className="flex-1 overflow-auto p-6">
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto p-6">
             <Outlet />
           </main>
         </div>
