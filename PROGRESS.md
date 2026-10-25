@@ -5,7 +5,7 @@
 - **Phase:** 7 — Hardening. Code complete; live verification in progress.
 - **Backend tests:** 136/136 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Last updated:** 2026-10-25
+- **Last updated:** 2026-10-26
 
 ---
 
@@ -29,8 +29,10 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 136 passed in 12.04s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 136 passed in 12.06s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
+| Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
+| README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
 | Rate limits (upload, AI, re-embed) | UNIT-TESTED (mocked) | `tests/test_rate_limit.py`; process-local |
 | Signed page-image URLs | UNIT-TESTED (mocked) | `tests/test_storage_security.py` |
 | Storage upload/delete wiring | UNIT-TESTED (mocked) | storage tests; live storage path exercised by PDF/handwriting smoke |
@@ -78,6 +80,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 - Step 6 PDF smoke: LIVE-VERIFIED — ready, 3 pages, 2 chunks, min_l2=0.589452, cleanup OK.
 - Step 6 handwriting rerun-OCR: NOT VERIFIED — Gemini returned 429 quota exhausted; smoke reported `re-run OCR HTTP 502`, cleanup OK.
 - Step 6b live rerun-OCR: NOT VERIFIED — no live Gemini calls run (quota exhausted); covered by mocked tests only.
+- Step 7 docs/secret scan: no live Gemini calls; git history contains no real secrets; `tsc` and build exit 0; upload notices added but browser UI NOT VERIFIED.
 - End-to-end smoke test: PARTIAL — PDF passed; handwriting rerun-OCR blocked by Gemini 429 quota; tutor/notes/quizzes/planner not exercised.
 - Migrations on a blank DB: NOT VERIFIED.
 - Tutor, notes, quizzes and planner against real Gemini: NOT VERIFIED.

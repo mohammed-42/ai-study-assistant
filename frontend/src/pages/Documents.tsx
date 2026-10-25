@@ -9,6 +9,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Upload, FileText } from 'lucide-react'
 
+function UploadNotice() {
+  return (
+    <div
+      role="note"
+      aria-label="Upload privacy and OCR notice"
+      className="space-y-1 text-sm text-muted-foreground"
+    >
+      <p>Handwriting recognition is not 100% accurate. Review the text after upload.</p>
+      <p>Uploaded files and page images are sent to Google Gemini for processing.</p>
+    </div>
+  )
+}
+
 export default function Documents() {
   const navigate = useNavigate()
   const { data: documents, isLoading } = useDocuments()
@@ -35,6 +48,9 @@ export default function Documents() {
         <Upload className="h-12 w-12 text-muted-foreground" />
         <h2 className="mt-4 text-xl font-semibold">No documents yet</h2>
         <p className="mt-2 text-muted-foreground">Upload your first PDF or images to get started</p>
+        <div className="mt-4">
+          <UploadNotice />
+        </div>
         <Button onClick={() => navigate('/subjects')} className="mt-4">
           Go to Subjects
         </Button>
@@ -51,6 +67,8 @@ export default function Documents() {
           Upload New
         </Button>
       </div>
+
+      <UploadNotice />
 
       <Card>
         <CardHeader>
