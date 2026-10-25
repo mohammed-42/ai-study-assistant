@@ -107,14 +107,16 @@ class GeminiOcrProvider(OcrProvider):
             )
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """Batch-embed texts using the configured embedding model."""
+        """Batch-embed texts; raise instead of returning zero vectors on failure."""
         model_name = settings.EMBEDDING_MODEL or self.EMBEDDING_MODEL
         dim = settings.EMBEDDING_DIM or 768
+        if not texts:
+            return []
+
         vectors: list[list[float]] = []
         for text in texts:
             if not text or not text.strip():
-                vectors.append([0.0] * dim)
-                continue
+                raise ValueError("Cannot embed empty text")
             try:
                 response = await call_with_retry(
                     genai.embed_content,
@@ -124,14 +126,20 @@ class GeminiOcrProvider(OcrProvider):
                     timeout=settings.GEMINI_TIMEOUT_SECONDS,
                     retries=settings.GEMINI_MAX_RETRIES,
                 )
-                embedding = response.get("embedding", [0.0] * dim)
-                # Pad or truncate to expected dimension
-                if len(embedding) < dim:
-                    embedding = embedding + [0.0] * (dim - len(embedding))
-                elif len(embedding) > dim:
-                    embedding = embedding[:dim]
-                vectors.append(embedding)
             except Exception as exc:
-                logger.warning("Embedding failed for chunk: %s", exc)
-                vectors.append([0.0] * dim)
+                logger.warning("Gemini embedding failed: %s", type(exc).__name__)
+                raise
+
+            embedding = response.get("embedding") if isinstance(response, dict) else None
+            if not embedding:
+                raise RuntimeError("Embedding response did not contain a vector")
+            embedding = [float(value) for value in embedding]
+            # Pad or truncate to expected dimension
+            if len(embedding) < dim:
+                embedding = embedding + [0.0] * (dim - len(embedding))
+            elif len(embedding) > dim:
+                embedding = embedding[:dim]
+            if not any(abs(value) > 0.0 for value in embedding):
+                raise RuntimeError("Embedding response was all zeros")
+            vectors.append(embedding)
         return vectors

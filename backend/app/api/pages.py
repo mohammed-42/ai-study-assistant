@@ -17,7 +17,12 @@ from app.models.document import Document
 from app.models.document_page import DocumentPage
 from app.models.profile import Profile
 from app.schemas.document import DocumentPageOut
-from app.services.processing import re_embed_page_background
+from app.services.processing import (
+    DocumentProcessingError,
+    _check_daily_ocr_limit,
+    re_embed_page_background,
+    rerun_page_ocr,
+)
 from app.services.storage import create_signed_url
 
 logger = logging.getLogger(__name__)
@@ -69,6 +74,56 @@ async def edit_page(
     background_tasks.add_task(re_embed_page_background, page.id, body.text)
 
     return page
+
+
+@router.post("/{page_id}/rerun-ocr", response_model=DocumentPageOut)
+async def rerun_page_with_ocr(
+    document_id: str,
+    page_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: Profile = Depends(get_current_user),
+) -> DocumentPage:
+    """Re-read a stored page image with OCR and atomically replace its text/chunks."""
+    await enforce_rate_limit("ai", user.id, "RATE_LIMIT_AI_PER_MINUTE")
+
+    doc_stmt = select(Document).where(
+        Document.id == uuid.UUID(document_id),
+        Document.owner_id == user.id,
+    )
+    doc = (await db.execute(doc_stmt)).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+
+    page = await db.get(DocumentPage, uuid.UUID(page_id))
+    if page is None or page.document_id != doc.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="page not found")
+    if not page.page_image_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This page has no image to re-read.",
+        )
+
+    try:
+        await _check_daily_ocr_limit(db, user.id, 1)
+    except DocumentProcessingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        return await rerun_page_ocr(db, page)
+    except DocumentProcessingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.exception("Re-run OCR failed for page %s: %s", page.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not re-read this page. Please try again.",
+        ) from exc
 
 
 @router.get("/{page_id}/image-url")

@@ -64,6 +64,10 @@ export const documentApi = {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
+  rerunPageOcr: (docId: string, pageId: string) =>
+    apiFetch<DocumentPage>(`/documents/${docId}/pages/${pageId}/rerun-ocr`, {
+      method: 'POST',
+    }),
 }
 
 // Chat/Tutor APIs

@@ -17,6 +17,33 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+OCR_RENDER_DPI = 200
+
+NO_READABLE_TEXT_MESSAGE = "No readable text was found in this file."
+EMBEDDING_UNAVAILABLE_MESSAGE = "Embedding service unavailable. Please retry."
+AI_NOT_CONFIGURED_MESSAGE = "AI service is not configured. Please retry after configuration."
+GENERIC_PROCESSING_ERROR_MESSAGE = "Processing failed. Please retry."
+DAILY_OCR_LIMIT_MESSAGE = "Daily OCR limit reached. Try again tomorrow or upload fewer pages."
+OCR_RERUN_FAILED_MESSAGE = "Could not re-read this page. Please try again."
+OCR_RERUN_EMBED_FAILED_MESSAGE = "Could not embed the re-read page. Please try again."
+
+
+class DocumentProcessingError(RuntimeError):
+    """A processing failure whose message is safe to show to the user."""
+
+
+def _safe_error_message(exc: Exception) -> str:
+    if isinstance(exc, DocumentProcessingError):
+        return str(exc)
+    return GENERIC_PROCESSING_ERROR_MESSAGE
+
+
+def _has_real_embedding(vector: list[float] | None) -> bool:
+    if not vector:
+        return False
+    return any(abs(float(value)) > 0.0 for value in vector)
+
+
 # Lazy import of fitz (PyMuPDF) to avoid DLL issues in test env
 _fitz: object | None = None
 
@@ -43,9 +70,14 @@ async def process_document(db: AsyncSession, document_id: str) -> None:
         return
 
     doc.status = "processing"
+    doc.error_message = None
     await db.commit()
 
+    job = None
+    job_finished = False
     try:
+        job = await _start_processing_job(db, doc.id)
+
         # Clear old pages/chunks for idempotent retries
         await _clear_existing_pages_and_chunks(db, doc.id)
 
@@ -54,7 +86,7 @@ async def process_document(db: AsyncSession, document_id: str) -> None:
         elif doc.doc_type in ("image", "multi_image"):
             await _process_images(db, doc)
         else:
-            raise ValueError(f"unknown doc_type: {doc.doc_type}")
+            raise DocumentProcessingError(GENERIC_PROCESSING_ERROR_MESSAGE)
 
         # Create chunks from all pages, then embed them
         pages_stmt = (
@@ -65,24 +97,50 @@ async def process_document(db: AsyncSession, document_id: str) -> None:
         pages_result = await db.execute(pages_stmt)
         pages = list(pages_result.scalars().all())
 
-        if pages:
-            await create_chunks(db, doc.id, pages)
-            # Fetch newly created chunks for embedding
-            chunk_stmt = select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
-            chunk_result = await db.execute(chunk_stmt)
-            chunks = list(chunk_result.scalars().all())
-            if chunks:
-                await embed_chunks(db, chunks)
+        if not pages or not any(page.text and page.text.strip() for page in pages):
+            raise DocumentProcessingError(NO_READABLE_TEXT_MESSAGE)
+
+        await create_chunks(db, doc.id, pages)
+        # Fetch newly created chunks for embedding
+        chunk_stmt = select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+        chunk_result = await db.execute(chunk_stmt)
+        chunks = list(chunk_result.scalars().all())
+        if not chunks:
+            raise DocumentProcessingError(GENERIC_PROCESSING_ERROR_MESSAGE)
+
+        await embed_chunks(db, chunks)
+
+        if not pages or not any(page.text and page.text.strip() for page in pages):
+            raise DocumentProcessingError(NO_READABLE_TEXT_MESSAGE)
+        if not chunks or any(not _has_real_embedding(chunk.embedding) for chunk in chunks):
+            raise DocumentProcessingError(EMBEDDING_UNAVAILABLE_MESSAGE)
 
         doc.status = "ready"
         doc.page_count = len(pages)
+        doc.error_message = None
+        if job is not None:
+            job.status = "completed"
+            job.last_error = None
+            job_finished = True
 
     except Exception as exc:
+        safe_message = _safe_error_message(exc)
         doc.status = "failed"
-        doc.error_message = str(exc)[:2000]
-        logger.exception("Document %s processing failed", document_id)
+        doc.error_message = safe_message
+        if job is not None:
+            job.status = "failed"
+            job.last_error = safe_message
+            job_finished = True
+        try:
+            await _delete_document_chunks(db, doc.id)
+        except Exception:
+            logger.exception("Failed to clear chunks for failed document %s", document_id)
+        logger.exception("Document %s processing failed: %s", document_id, safe_message)
         raise
     finally:
+        if job is not None and not job_finished:
+            job.status = "failed"
+            job.last_error = GENERIC_PROCESSING_ERROR_MESSAGE
         await db.commit()
 
 
@@ -130,7 +188,7 @@ async def process_document_background(document_id: str, db: AsyncSession | None 
                 doc = result.scalar_one_or_none()
                 if doc:
                     doc.status = "failed"
-                    doc.error_message = str(exc_raised)[:2000]
+                    doc.error_message = _safe_error_message(exc_raised)
                     await db.commit()
             except Exception:
                 logger.exception("Failed to mark document %s as failed", document_id)
@@ -148,6 +206,33 @@ async def _clear_existing_pages_and_chunks(db: AsyncSession, doc_id: uuid.UUID) 
     await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
     await db.execute(delete(DocumentPage).where(DocumentPage.document_id == doc_id))
     await db.commit()
+
+
+async def _delete_document_chunks(db: AsyncSession, doc_id: uuid.UUID) -> None:
+    """Remove chunks so a failed embedding attempt persists no zero vectors."""
+    from sqlalchemy import delete
+    from app.models.document_chunk import DocumentChunk as ChunkModel
+    await db.execute(delete(ChunkModel).where(ChunkModel.document_id == doc_id))
+    await db.commit()
+
+
+async def _start_processing_job(db: AsyncSession, doc_id: uuid.UUID):
+    """Start a job and clear any stale running job for this document."""
+    from sqlalchemy import update
+    from app.models.processing_job import ProcessingJob
+    await db.execute(
+        update(ProcessingJob)
+        .where(
+            ProcessingJob.document_id == doc_id,
+            ProcessingJob.status == "running",
+        )
+        .values(status="failed", last_error="Superseded by a new processing attempt")
+    )
+    job = ProcessingJob(document_id=doc_id, status="running", attempts=1)
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+    return job
 
 
 async def _process_pdf(db: AsyncSession, doc: Document) -> None:
@@ -179,19 +264,28 @@ async def _process_pdf(db: AsyncSession, doc: Document) -> None:
             logger.warning("PDF %s has 0 pages", doc.id)
             return
 
+        page_specs: list[tuple[int, object, str]] = []
         for page_num in range(page_count):
             page = pdf_doc[page_num]
-            text = page.get_text().strip()
+            page_specs.append((page_num, page, page.get_text().strip()))
+
+        pages_needing_ocr = sum(1 for _num, _page, text in page_specs if not text)
+        _check_per_doc_ocr_limit(pages_needing_ocr)
+        if pages_needing_ocr:
+            await _check_daily_ocr_limit(db, doc.owner_id, pages_needing_ocr)
+
+        ocr_provider = _get_ocr_provider() if pages_needing_ocr else None
+
+        for page_num, page, text in page_specs:
             source = "text_layer"
             needs_review = False
 
             # If text layer is empty, render page as image and OCR it
             if not text:
                 try:
-                    mat = fitz.Matrix(2, 2)  # 2x zoom ≈ 144 DPI
+                    mat = fitz.Matrix(OCR_RENDER_DPI / 72, OCR_RENDER_DPI / 72)
                     pix = page.get_pixmap(matrix=mat)
                     img_bytes = pix.tobytes("png")
-                    ocr_provider = _get_ocr_provider()
                     if ocr_provider:
                         ocr_result = await ocr_provider.transcribe_page(img_bytes, "image/png")
                         text = ocr_result.text
@@ -232,11 +326,13 @@ async def _process_images(
         logger.warning("No image pages found for document %s", doc.id)
         return
 
+    _check_per_doc_ocr_limit(len(image_pages))
+
     provider = ocr_provider or _get_ocr_provider()
     if provider is None:
-        raise RuntimeError("No OCR provider configured and GEMINI_API_KEY is not set")
+        raise DocumentProcessingError(AI_NOT_CONFIGURED_MESSAGE)
 
-    # Check daily limit
+    # Check daily limit before spending any OCR call
     await _check_daily_ocr_limit(db, doc.owner_id, len(image_pages))
 
     for idx, (page_info, image_bytes, mime_type) in enumerate(image_pages):
@@ -257,6 +353,18 @@ async def _process_images(
         await asyncio.sleep(0.1)
 
     await db.commit()
+
+
+def _check_per_doc_ocr_limit(pages_to_process: int) -> None:
+    """Raise when a file needs more OCR pages than the per-document cap."""
+    limit = settings.OCR_LIMIT_PAGES_PER_DOC
+    if not limit:
+        return
+    if pages_to_process > limit:
+        raise DocumentProcessingError(
+            f"This file needs OCR on {pages_to_process} pages, "
+            f"which is over the limit of {limit} pages per file."
+        )
 
 
 async def _check_daily_ocr_limit(db: AsyncSession, owner_id: uuid.UUID, pages_to_process: int) -> None:
@@ -280,10 +388,7 @@ async def _check_daily_ocr_limit(db: AsyncSession, owner_id: uuid.UUID, pages_to
     already_today = len(result.scalars().all())
 
     if already_today + pages_to_process > limit:
-        raise RuntimeError(
-            f"Daily OCR limit reached ({limit} pages). "
-            f"Already processed {already_today} today, attempting {pages_to_process} more."
-        )
+        raise DocumentProcessingError(DAILY_OCR_LIMIT_MESSAGE)
 
 
 def _get_ocr_provider() -> OcrProvider | None:
@@ -385,6 +490,8 @@ async def create_chunks(db: AsyncSession, document_id: uuid.UUID, pages: list[Do
     chunks = chunk_text(all_text)
 
     for i, chunk_content in enumerate(chunks):
+        if not chunk_content.strip():
+            continue
         total_pages = len(pages)
         chunk_size = len(all_text) / max(len(chunks), 1)
         page_start = int(i * chunk_size / max(len(pages), 1))
@@ -407,22 +514,133 @@ async def embed_chunks(
     chunks: list[DocumentChunk],
     ocr_provider: OcrProvider | None = None,
 ) -> None:
-    """Generate embeddings for chunks using the configured provider."""
+    """Generate embeddings for chunks; raise instead of persisting zero vectors."""
     provider = ocr_provider or _get_ocr_provider()
     if provider is None:
-        logger.warning("No OCR provider available — skipping embedding generation")
-        return
+        raise DocumentProcessingError(AI_NOT_CONFIGURED_MESSAGE)
 
-    texts = [c.content for c in chunks if c.content.strip()]
-    if not texts:
-        return
+    if not chunks:
+        raise DocumentProcessingError(GENERIC_PROCESSING_ERROR_MESSAGE)
+    if any(not chunk.content.strip() for chunk in chunks):
+        raise DocumentProcessingError(GENERIC_PROCESSING_ERROR_MESSAGE)
 
-    vectors = await provider.embed_texts(texts)
+    texts = [chunk.content for chunk in chunks]
+    try:
+        vectors = await provider.embed_texts(texts)
+    except Exception as exc:
+        logger.warning("Embedding generation failed: %s", type(exc).__name__)
+        reason = str(exc).lower()
+        if any(
+            marker in reason
+            for marker in ("api key", "api_key", "permission", "unauthorized", "401", "403")
+        ):
+            raise DocumentProcessingError(AI_NOT_CONFIGURED_MESSAGE) from exc
+        raise DocumentProcessingError(EMBEDDING_UNAVAILABLE_MESSAGE) from exc
+
+    if len(vectors) != len(chunks):
+        raise DocumentProcessingError(EMBEDDING_UNAVAILABLE_MESSAGE)
+    if any(not _has_real_embedding(vector) for vector in vectors):
+        raise DocumentProcessingError(EMBEDDING_UNAVAILABLE_MESSAGE)
 
     for chunk, vector in zip(chunks, vectors):
         chunk.embedding = vector
 
     await db.commit()
+
+
+async def rerun_page_ocr(
+    db: AsyncSession,
+    page: DocumentPage,
+    ocr_provider: OcrProvider | None = None,
+) -> DocumentPage:
+    """Re-read one stored page image with OCR, replacing text and chunks atomically.
+
+    OCR and embeddings run before any database mutation. If either fails, the
+    page text and its existing chunks are left untouched.
+    """
+    from sqlalchemy import delete
+
+    provider = ocr_provider or _get_ocr_provider()
+    if provider is None:
+        raise DocumentProcessingError(AI_NOT_CONFIGURED_MESSAGE)
+
+    image_key = page.page_image_key
+    if not image_key:
+        raise DocumentProcessingError("This page has no image to re-read.")
+
+    try:
+        image_bytes = _get_storage_client().storage.from_(settings.STORAGE_BUCKET).download(
+            image_key
+        )
+    except Exception as exc:
+        logger.warning("Page image download failed for page %s: %s", page.id, exc)
+        raise DocumentProcessingError(OCR_RERUN_FAILED_MESSAGE) from exc
+    if not image_bytes:
+        raise DocumentProcessingError(OCR_RERUN_FAILED_MESSAGE)
+
+    ext = image_key.rsplit(".", 1)[-1].lower() if "." in image_key else ""
+    mime_type = {
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp",
+    }.get(ext, "image/png")
+
+    try:
+        ocr_result = await provider.transcribe_page(image_bytes, mime_type)
+    except Exception as exc:
+        logger.warning("Re-run OCR failed for page %s: %s", page.id, exc)
+        raise DocumentProcessingError(OCR_RERUN_FAILED_MESSAGE) from exc
+
+    new_text = ocr_result.text or ""
+    if not new_text.strip():
+        raise DocumentProcessingError(OCR_RERUN_FAILED_MESSAGE)
+    needs_review = flag_needs_review(ocr_result)
+
+    chunk_contents = [chunk for chunk in chunk_text(new_text) if chunk.strip()]
+    if not chunk_contents:
+        raise DocumentProcessingError(OCR_RERUN_FAILED_MESSAGE)
+
+    try:
+        vectors = await provider.embed_texts(chunk_contents)
+    except Exception as exc:
+        logger.warning("Re-run OCR embedding failed for page %s: %s", page.id, exc)
+        raise DocumentProcessingError(OCR_RERUN_EMBED_FAILED_MESSAGE) from exc
+    if len(vectors) != len(chunk_contents) or any(
+        not _has_real_embedding(vector) for vector in vectors
+    ):
+        raise DocumentProcessingError(OCR_RERUN_EMBED_FAILED_MESSAGE)
+
+    try:
+        page.text = new_text
+        page.source = "ocr"
+        page.user_edited = False
+        page.needs_review = needs_review
+        await db.execute(
+            delete(DocumentChunk).where(
+                DocumentChunk.document_id == page.document_id,
+                DocumentChunk.page_start <= page.page_number,
+                DocumentChunk.page_end >= page.page_number,
+            )
+        )
+        for content, vector in zip(chunk_contents, vectors):
+            db.add(
+                DocumentChunk(
+                    document_id=page.document_id,
+                    page_start=page.page_number,
+                    page_end=page.page_number,
+                    content=content,
+                    token_count=len(content) // 4,
+                    embedding=vector,
+                )
+            )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+    await db.refresh(page)
+    return page
 
 
 async def re_embed_page(db: AsyncSession, page_id: uuid.UUID, new_text: str) -> None:

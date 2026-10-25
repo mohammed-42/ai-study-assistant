@@ -138,6 +138,49 @@ async def test_gemini_provider_transcribe_error_returns_low_conf():
     assert len(result.flags) > 0
 
 
+@pytest.mark.asyncio
+async def test_gemini_provider_embed_texts_raises_on_failure():
+    """Embedding failure raises instead of returning zero vectors."""
+    mock_model = MagicMock()
+
+    with patch("app.ai.gemini.genai.configure"), \
+         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+         patch("app.ai.gemini.settings") as mock_settings:
+        mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_TIMEOUT_SECONDS = 60
+        mock_settings.GEMINI_MAX_RETRIES = 0
+        mock_settings.EMBEDDING_MODEL = "gemini-embedding-001"
+        mock_settings.EMBEDDING_DIM = 768
+        provider = GeminiOcrProvider()
+        with patch("app.ai.gemini.genai.embed_content", side_effect=Exception("network error")):
+            with pytest.raises(RuntimeError):
+                await provider.embed_texts(["hello world"])
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_embed_texts_rejects_zero_vector():
+    """An all-zero embedding response is rejected."""
+    mock_model = MagicMock()
+
+    with patch("app.ai.gemini.genai.configure"), \
+         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+         patch("app.ai.gemini.settings") as mock_settings:
+        mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_TIMEOUT_SECONDS = 60
+        mock_settings.GEMINI_MAX_RETRIES = 0
+        mock_settings.EMBEDDING_MODEL = "gemini-embedding-001"
+        mock_settings.EMBEDDING_DIM = 768
+        provider = GeminiOcrProvider()
+        with patch(
+            "app.ai.gemini.genai.embed_content",
+            return_value={"embedding": [0.0] * 768},
+        ):
+            with pytest.raises(RuntimeError, match="all zeros"):
+                await provider.embed_texts(["hello world"])
+
+
 # --- TesseractOcrProvider tests ---
 
 @pytest.mark.asyncio

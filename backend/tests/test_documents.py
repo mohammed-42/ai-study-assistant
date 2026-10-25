@@ -281,13 +281,15 @@ async def test_process_document_with_session(db_session, test_user, test_subject
     await db_session.commit()
     await db_session.refresh(doc)
 
-    # Call process_document directly — PDF path does 0 pages so status → ready
-    await process_document(db_session, str(doc.id))
+    # No storage mock -> 0 pages -> failed
+    with pytest.raises(RuntimeError):
+        await process_document(db_session, str(doc.id))
 
     # Re-query via the same session to confirm status changed
     refreshed = await db_session.get(Document, doc.id)
-    assert refreshed.status == DocumentStatus.READY
+    assert refreshed.status == DocumentStatus.FAILED
     assert refreshed.page_count == 0
+    assert refreshed.error_message == "No readable text was found in this file."
 
 
 @pytest.mark.asyncio
@@ -305,8 +307,9 @@ async def test_process_document_background_with_session(db_session, test_user, t
     await process_document_background(doc_id, db=db_session)
 
     refreshed = await db_session.get(Document, uuid.UUID(doc_id))
-    assert refreshed.status == DocumentStatus.READY
+    assert refreshed.status == DocumentStatus.FAILED
     assert refreshed.page_count == 0
+    assert refreshed.error_message == "No readable text was found in this file."
 
 
 @pytest.mark.asyncio
@@ -376,6 +379,13 @@ async def test_process_pdf_creates_chunks_and_embeddings(db_session, test_user, 
     mock_storage.storage.from_("documents").download.return_value = pdf_bytes
     monkeypatch.setattr("app.services.processing._get_storage_client", lambda: mock_storage)
 
+    async def fake_embed(texts):
+        return [[0.1] * 768 for _ in texts]
+
+    mock_provider = MagicMock()
+    mock_provider.embed_texts = AsyncMock(side_effect=fake_embed)
+    monkeypatch.setattr("app.services.processing._get_ocr_provider", lambda: mock_provider)
+
     await process_document(db_session, doc_id)
 
     refreshed = await db_session.get(Document, doc.id)
@@ -394,11 +404,8 @@ async def test_process_pdf_creates_chunks_and_embeddings(db_session, test_user, 
     assert len(chunk_list) >= 1
     assert all(c.content.strip() for c in chunk_list)
 
-    # Verify embeddings were generated (non-zero vectors)
-    empty_vec = [0.0] * 768
-    has_embedding = any(c.embedding != empty_vec for c in chunk_list)
-    # Embeddings may be zeros if Gemini mock isn't set up, but chunks should exist
-    assert len(chunk_list) >= 1
+    # Every persisted chunk must have a real (non-zero) embedding.
+    assert all(any(abs(value) > 0.0 for value in c.embedding) for c in chunk_list)
 
 
 @pytest.mark.asyncio
@@ -458,8 +465,8 @@ async def test_process_image_creates_chunks_and_embeddings(db_session, test_user
 
 
 @pytest.mark.asyncio
-async def test_process_document_no_pages_stays_ready(db_session, test_user, test_subject):
-    """Document with no extractable pages still reaches ready status."""
+async def test_process_document_no_pages_fails(db_session, test_user, test_subject):
+    """Document with 0 extractable pages fails with a user-readable message."""
     from app.services.processing import process_document
 
     doc = Document(owner_id=test_user.id, subject_id=test_subject.id, name="Empty.pdf", doc_type="pdf", status=DocumentStatus.UPLOADED, storage_key="missing.pdf")
@@ -469,11 +476,231 @@ async def test_process_document_no_pages_stays_ready(db_session, test_user, test
     doc_id = str(doc.id)
 
     # No storage mock — _process_pdf will fail to download and return early
+    with pytest.raises(RuntimeError):
+        await process_document(db_session, doc_id)
+
+    refreshed = await db_session.get(Document, doc.id)
+    assert refreshed.status == DocumentStatus.FAILED
+    assert refreshed.page_count == 0
+    assert refreshed.error_message == "No readable text was found in this file."
+
+    chunks = await db_session.execute(
+        select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+    )
+    assert list(chunks.scalars().all()) == []
+
+
+@pytest.mark.asyncio
+async def test_process_document_embedding_failure_fails_without_chunks(
+    db_session, test_user, test_subject, monkeypatch
+):
+    """Embedding failure marks failed and persists no chunks."""
+    from app.services.processing import process_document
+    import fitz, tempfile, os
+
+    tmpdir = tempfile.mkdtemp()
+    pdf_path = os.path.join(tmpdir, "embed-fail.pdf")
+    pdf_doc = fitz.open()
+    pdf_doc.new_page().insert_text((72, 72), "Embedding failure test content.")
+    pdf_doc.save(pdf_path)
+    pdf_doc.close()
+    pdf_bytes = open(pdf_path, "rb").read()
+    os.unlink(pdf_path)
+    os.rmdir(tmpdir)
+
+    doc = Document(owner_id=test_user.id, subject_id=test_subject.id, name="EmbedFail.pdf", doc_type="pdf", status=DocumentStatus.UPLOADED, storage_key="embed-fail.pdf")
+    db_session.add(doc)
+    await db_session.commit()
+    await db_session.refresh(doc)
+    doc_id = str(doc.id)
+
+    mock_storage = MagicMock()
+    mock_storage.storage.from_("documents").download.return_value = pdf_bytes
+    monkeypatch.setattr("app.services.processing._get_storage_client", lambda: mock_storage)
+
+    mock_provider = MagicMock()
+    mock_provider.embed_texts = AsyncMock(side_effect=RuntimeError("network error"))
+    monkeypatch.setattr("app.services.processing._get_ocr_provider", lambda: mock_provider)
+
+    with pytest.raises(RuntimeError):
+        await process_document(db_session, doc_id)
+
+    refreshed = await db_session.get(Document, doc.id)
+    assert refreshed.status == DocumentStatus.FAILED
+    assert refreshed.error_message == "Embedding service unavailable. Please retry."
+
+    chunks = await db_session.execute(
+        select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+    )
+    assert list(chunks.scalars().all()) == []
+
+
+@pytest.mark.asyncio
+async def test_process_document_all_empty_ocr_pages_fails(
+    db_session, test_user, test_subject, monkeypatch
+):
+    """A document whose OCR pages are all empty fails with the no-text message."""
+    from app.services.processing import process_document
+    from app.ai.ocr import OcrResult, OcrQuality
+    import io
+    from PIL import Image
+
+    doc = Document(owner_id=test_user.id, subject_id=test_subject.id, name="EmptyOCR.jpg", doc_type="image", status=DocumentStatus.UPLOADED)
+    db_session.add(doc)
+    await db_session.commit()
+    await db_session.refresh(doc)
+    doc_id = str(doc.id)
+    folder = f"user/{test_user.id}/{doc_id}"
+    doc.storage_key = f"{folder}/0_a.png"
+    await db_session.commit()
+
+    img = Image.new("RGB", (10, 10), color="white")
+    img_bytes = io.BytesIO()
+    img.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    png_data = img_bytes.read()
+
+    mock_storage = MagicMock()
+    mock_storage.storage.from_("documents").list.return_value = [
+        {"name": "0_a.png"},
+        {"name": "1_b.png"},
+    ]
+    mock_storage.storage.from_("documents").download.return_value = png_data
+    monkeypatch.setattr("app.services.processing._get_storage_client", lambda: mock_storage)
+
+    mock_provider = MagicMock()
+    mock_provider.transcribe_page = AsyncMock(
+        return_value=OcrResult(
+            text="",
+            quality=OcrQuality.LOW,
+            flags=["no_text_detected"],
+            low_confidence=True,
+        )
+    )
+    mock_provider.embed_texts = AsyncMock(return_value=[[0.1] * 768])
+    monkeypatch.setattr("app.services.processing._get_ocr_provider", lambda: mock_provider)
+
+    with pytest.raises(RuntimeError):
+        await process_document(db_session, doc_id)
+
+    refreshed = await db_session.get(Document, doc.id)
+    assert refreshed.status == DocumentStatus.FAILED
+    assert refreshed.error_message == "No readable text was found in this file."
+
+    chunks = await db_session.execute(
+        select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+    )
+    assert list(chunks.scalars().all()) == []
+
+
+@pytest.mark.asyncio
+async def test_process_document_missing_gemini_key_fails(
+    db_session, test_user, test_subject, monkeypatch
+):
+    """Missing Gemini configuration fails clearly instead of persisting zero vectors."""
+    from app.services.processing import process_document
+    from app.core.config import settings
+    import fitz, tempfile, os
+
+    tmpdir = tempfile.mkdtemp()
+    pdf_path = os.path.join(tmpdir, "no-key.pdf")
+    pdf_doc = fitz.open()
+    pdf_doc.new_page().insert_text((72, 72), "Text that needs an embedding.")
+    pdf_doc.save(pdf_path)
+    pdf_doc.close()
+    pdf_bytes = open(pdf_path, "rb").read()
+    os.unlink(pdf_path)
+    os.rmdir(tmpdir)
+
+    doc = Document(owner_id=test_user.id, subject_id=test_subject.id, name="NoKey.pdf", doc_type="pdf", status=DocumentStatus.UPLOADED, storage_key="no-key.pdf")
+    db_session.add(doc)
+    await db_session.commit()
+    await db_session.refresh(doc)
+    doc_id = str(doc.id)
+
+    mock_storage = MagicMock()
+    mock_storage.storage.from_("documents").download.return_value = pdf_bytes
+    monkeypatch.setattr("app.services.processing._get_storage_client", lambda: mock_storage)
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(settings, "OCR_FALLBACK_ENABLED", False)
+
+    with pytest.raises(RuntimeError):
+        await process_document(db_session, doc_id)
+
+    refreshed = await db_session.get(Document, doc.id)
+    assert refreshed.status == DocumentStatus.FAILED
+    assert refreshed.error_message == "AI service is not configured. Please retry after configuration."
+
+    chunks = await db_session.execute(
+        select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+    )
+    assert list(chunks.scalars().all()) == []
+
+
+@pytest.mark.asyncio
+async def test_retry_after_embedding_failure_succeeds_without_duplicate_chunks(
+    db_session, test_user, test_subject, client, monkeypatch
+):
+    """Retry resets a failed document and succeeds without duplicate chunks."""
+    from app.services.processing import process_document
+    import fitz, tempfile, os
+
+    tmpdir = tempfile.mkdtemp()
+    pdf_path = os.path.join(tmpdir, "retry-embed.pdf")
+    pdf_doc = fitz.open()
+    pdf_doc.new_page().insert_text((72, 72), "Retry after embedding failure.")
+    pdf_doc.save(pdf_path)
+    pdf_doc.close()
+    pdf_bytes = open(pdf_path, "rb").read()
+    os.unlink(pdf_path)
+    os.rmdir(tmpdir)
+
+    doc = Document(owner_id=test_user.id, subject_id=test_subject.id, name="RetryEmbed.pdf", doc_type="pdf", status=DocumentStatus.UPLOADED, storage_key="retry-embed.pdf")
+    db_session.add(doc)
+    await db_session.commit()
+    await db_session.refresh(doc)
+    doc_id = str(doc.id)
+
+    mock_storage = MagicMock()
+    mock_storage.storage.from_("documents").download.return_value = pdf_bytes
+    monkeypatch.setattr("app.services.processing._get_storage_client", lambda: mock_storage)
+
+    calls = {"count": 0}
+
+    async def flaky_embed(texts):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("temporary embedding outage")
+        return [[0.2] * 768 for _ in texts]
+
+    mock_provider = MagicMock()
+    mock_provider.embed_texts = AsyncMock(side_effect=flaky_embed)
+    monkeypatch.setattr("app.services.processing._get_ocr_provider", lambda: mock_provider)
+
+    with pytest.raises(RuntimeError):
+        await process_document(db_session, doc_id)
+
+    failed = await db_session.get(Document, doc.id)
+    assert failed.status == DocumentStatus.FAILED
+
+    retry_response = client.post(f"/api/documents/{doc_id}/retry")
+    assert retry_response.status_code == 200
+    assert retry_response.json()["status"] == "uploaded"
+
     await process_document(db_session, doc_id)
 
     refreshed = await db_session.get(Document, doc.id)
     assert refreshed.status == DocumentStatus.READY
-    assert refreshed.page_count == 0
+    assert refreshed.page_count == 1
+    assert refreshed.error_message is None
+
+    chunks = await db_session.execute(
+        select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+    )
+    chunk_list = list(chunks.scalars().all())
+    assert len(chunk_list) >= 1
+    assert all(any(abs(value) > 0.0 for value in c.embedding) for c in chunk_list)
+    assert len(chunk_list) == len({c.content for c in chunk_list})
 
 
 @pytest.mark.asyncio
@@ -509,6 +736,10 @@ async def test_process_document_retry_clears_old_data(db_session, test_user, tes
     mock_storage = MagicMock()
     mock_storage.storage.from_("documents").download.return_value = pdf_bytes
     monkeypatch.setattr("app.services.processing._get_storage_client", lambda: mock_storage)
+
+    mock_provider = MagicMock()
+    mock_provider.embed_texts = AsyncMock(return_value=[[0.3] * 768])
+    monkeypatch.setattr("app.services.processing._get_ocr_provider", lambda: mock_provider)
 
     # Second pass (retry)
     await process_document(db_session, doc_id)

@@ -5,8 +5,9 @@ import { DocumentPage, DocumentChunk } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, FileText, Upload, Pencil, Check, X } from 'lucide-react'
+import { AlertCircle, FileText, Upload, Pencil, Check, X, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
+import { useRerunPageOcr } from '@/hooks/use-documents'
 
 export default function DocumentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -43,6 +44,16 @@ export default function DocumentDetail() {
       setEditText('')
     },
   })
+
+  const rerunOcrMutation = useRerunPageOcr(id)
+
+  const rerunOcr = (page: DocumentPage) => {
+    const confirmed = window.confirm(
+      'This replaces the current text, including your edits.'
+    )
+    if (!confirmed) return
+    rerunOcrMutation.mutate({ pageId: page.id })
+  }
 
   const startEdit = (page: DocumentPage) => {
     setEditingPageId(page.id)
@@ -136,6 +147,28 @@ export default function DocumentDetail() {
                           Edited
                         </Badge>
                       )}
+                      {page.page_image_key && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => rerunOcr(page)}
+                          disabled={
+                            rerunOcrMutation.isPending &&
+                            rerunOcrMutation.variables?.pageId === page.id
+                          }
+                          aria-label={`Re-read page ${page.page_number} with OCR`}
+                        >
+                          <RefreshCw
+                            className={`h-3 w-3 ${
+                              rerunOcrMutation.isPending &&
+                              rerunOcrMutation.variables?.pageId === page.id
+                                ? 'animate-spin'
+                                : ''
+                            }`}
+                          />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -147,6 +180,12 @@ export default function DocumentDetail() {
                       </Button>
                     </div>
                   </div>
+                  {rerunOcrMutation.isError &&
+                    rerunOcrMutation.variables?.pageId === page.id && (
+                      <p className="mt-1 text-sm text-destructive">
+                        {rerunOcrMutation.error.message}
+                      </p>
+                    )}
                   {editingPageId === page.id ? (
                     <div className="mt-2 space-y-2">
                       <textarea
