@@ -61,11 +61,11 @@ export default function Notes({ subjectId }: NotesProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">
           {subjectId ? 'Notes' : 'All Notes'}
-        </h2>
-        <Button onClick={() => setGenerateOpen(true)}>
+        </h1>
+        <Button onClick={() => setGenerateOpen(true)} className="shrink-0">
           <Sparkles className="mr-2 h-4 w-4" />
           Generate Note
         </Button>
@@ -84,7 +84,7 @@ export default function Notes({ subjectId }: NotesProps) {
             </CardDescription>
           </CardHeader>
           <CardFooter>
-            <Button onClick={() => setGenerateOpen(true)}>
+            <Button onClick={() => setGenerateOpen(true)} className="shrink-0">
               <Plus className="mr-2 h-4 w-4" />
               Generate First Note
             </Button>
@@ -95,9 +95,9 @@ export default function Notes({ subjectId }: NotesProps) {
           {notes.map((note: Note) => (
             <Card key={note.id} className="flex flex-col">
               <CardHeader>
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-base flex-1">{note.title}</CardTitle>
-                  <Badge className={noteTypeColor(note.note_type as NoteType)}>{noteTypeLabel(note.note_type as NoteType)}</Badge>
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="min-w-0 flex-1 break-words text-base">{note.title}</CardTitle>
+                  <Badge className={`shrink-0 ${noteTypeColor(note.note_type as NoteType)}`}>{noteTypeLabel(note.note_type as NoteType)}</Badge>
                 </div>
                 <CardDescription className="line-clamp-2">
                   {note.content.slice(0, 120)}...

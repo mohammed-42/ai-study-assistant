@@ -35,12 +35,13 @@ export const documentApi = {
   get: (id: string) => apiFetch<AppDocument>(`/documents/${id}`),
   delete: (id: string) => apiFetch<void>(`/documents/${id}`, { method: 'DELETE' }),
   retry: (id: string) => apiFetch<AppDocument>(`/documents/${id}/retry`, { method: 'POST' }),
-  upload: async (file: File, subjectId: string, docType: string) => {
+  upload: async (files: File[], subjectId: string, docType: string) => {
     const formData = new FormData()
-    formData.append('file', file)
+    files.forEach((file) => formData.append('files', file))
     const token = await getAccessToken()
+    const params = new URLSearchParams({ subject_id: subjectId, doc_type: docType })
     
-    const response = await fetch(`${API_URL}/documents/upload?subject_id=${subjectId}&doc_type=${docType}`, {
+    const response = await fetch(`${API_URL}/documents/upload?${params.toString()}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

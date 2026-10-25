@@ -53,6 +53,9 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Gemini text, vision, embedding | LIVE-VERIFIED | Text and vision passed; `gemini-embedding-001` returned 768 dims with `output_dimensionality=768` |
 | Supabase login | LIVE-VERIFIED | Login succeeded |
 | End-to-end smoke test | PARTIAL | PDF path LIVE-VERIFIED; handwriting rerun-OCR NOT VERIFIED (Gemini 429 quota); tutor/notes/quizzes/planner not exercised |
+| Tailwind 3 compatibility | UNIT-TESTED (mocked) | No v4-only utility matches remain; `tailwindcss 3.4.10` build exit 0; CSS contains card spacing, 3px ring, 2px blur, `has-`/`data-` variants |
+| Upload dialog | NOT VERIFIED | New dialog supports one PDF or 2-20 images, reorder/remove, client validation, status polling, and privacy/OCR notices; `tsc`/build exit 0; browser UI not exercised |
+| Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
 | Migrations on a blank DB | NOT VERIFIED | — |
 | Tutor, notes, quizzes, planner against real Gemini | NOT VERIFIED | — |
 | Browser UI test | NOT VERIFIED | — |
@@ -101,7 +104,6 @@ The live DB already holds non-test data. Smoke tests may delete only what they c
 - Migrate `google.generativeai` to `google.genai`.
 - Retry `gemini-3.8-flash` later.
 - Remove hardcoded model IDs in `app/ai/gemini.py` and tests.
-- Replace Tailwind v4 syntax in shadcn components.
 - Replace the per-process rate limiter with a shared store for multi-instance use.
 - Test migrations on a blank DB.
 - Resume-from-failed-page remains open.

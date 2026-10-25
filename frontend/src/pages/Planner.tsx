@@ -59,14 +59,14 @@ export default function Planner() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Study Planner</h2>
+          <h1 className="text-2xl font-bold tracking-tight">Study Planner</h1>
           <p className="text-muted-foreground">Create and manage your study plans.</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger>
-            <Button>
+            <Button className="shrink-0">
               <Plus className="mr-2 h-4 w-4" /> New Plan
             </Button>
           </DialogTrigger>
@@ -167,9 +167,9 @@ export default function Planner() {
           {plans.map((plan: StudyPlan) => (
             <Card key={plan.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
+                <CardTitle className="flex items-center justify-between gap-2 break-words text-lg">
                   {plan.title}
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
                     plan.status === 'active' ? 'bg-green-100 text-green-700' :
                     plan.status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
                     'bg-gray-100 text-gray-700'

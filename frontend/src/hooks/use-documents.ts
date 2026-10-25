@@ -8,6 +8,14 @@ export function useDocuments(subjectId?: string) {
   return useQuery({
     queryKey: [...QUERY_KEY, subjectId],
     queryFn: () => documentApi.list(subjectId),
+    refetchInterval: (query) => {
+      const documents = query.state.data
+      return documents?.some(
+        (document) => document.status === 'uploaded' || document.status === 'processing'
+      )
+        ? 3000
+        : false
+    },
   })
 }
 
@@ -74,8 +82,8 @@ export function useUploadDocument() {
   const { toast } = useToast()
 
   return useMutation({
-    mutationFn: ({ file, subjectId, docType }: { file: File; subjectId: string; docType: string }) =>
-      documentApi.upload(file, subjectId, docType),
+    mutationFn: ({ files, subjectId, docType }: { files: File[]; subjectId: string; docType: string }) =>
+      documentApi.upload(files, subjectId, docType),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY })
       toast({ title: 'Document uploaded' })

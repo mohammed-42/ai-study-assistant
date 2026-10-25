@@ -85,9 +85,9 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Quizzes</h2>
-        <Button onClick={() => setGenerateOpen(true)}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Quizzes</h1>
+        <Button onClick={() => setGenerateOpen(true)} className="shrink-0">
           <Sparkles className="mr-2 h-4 w-4" />
           Generate Quiz
         </Button>
@@ -106,7 +106,7 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
             </CardDescription>
           </CardHeader>
           <CardFooter>
-            <Button onClick={() => setGenerateOpen(true)}>
+            <Button onClick={() => setGenerateOpen(true)} className="shrink-0">
               <Plus className="mr-2 h-4 w-4" />
               Generate First Quiz
             </Button>
@@ -118,9 +118,9 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
             <Card key={quiz.id} className="flex flex-col">
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <CardTitle className="text-base flex-1">{quiz.title}</CardTitle>
+                  <CardTitle className="min-w-0 flex-1 break-words text-base">{quiz.title}</CardTitle>
                 </div>
-                <CardDescription className="flex gap-2 mt-2">
+                <CardDescription className="mt-2 flex flex-wrap gap-2">
                   <Badge className={diffColor(quiz.difficulty)}>{quiz.difficulty}</Badge>
                   <Badge variant="outline">{typeLabel(quiz.quiz_type)}</Badge>
                   <Badge variant="secondary">{quiz.question_count} questions</Badge>
@@ -135,7 +135,7 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/quizzes/${quiz.id}`)}>
                   <Play className="mr-1 h-3 w-3" /> Take
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(quiz.id)}>
+                <Button variant="ghost" size="icon" aria-label={`Delete quiz ${quiz.title}`} onClick={() => setDeleteTarget(quiz.id)}>
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </CardFooter>

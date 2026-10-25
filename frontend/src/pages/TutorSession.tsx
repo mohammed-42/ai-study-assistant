@@ -56,9 +56,9 @@ export default function TutorSession() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
-      <div className="border-b px-6 py-3 flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3 border-b pb-3">
         <Button variant="ghost" size="sm" onClick={() => navigate('/tutor')}>
           <ChevronLeft className="h-4 w-4 mr-1" />
           Back
@@ -67,7 +67,7 @@ export default function TutorSession() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-auto p-6 space-y-4" aria-live="polite">
+      <div className="flex-1 space-y-4 overflow-auto py-4" aria-live="polite">
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
@@ -105,7 +105,7 @@ export default function TutorSession() {
       </div>
 
       {/* Input */}
-      <div className="border-t p-4">
+      <div className="border-t pt-4">
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-3xl mx-auto">
           <Input
             value={input}
@@ -141,11 +141,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       }`}>
         {isUser ? 'You' : 'AI'}
       </div>
-      <div className={`max-w-[80%] ${isUser ? 'text-right' : ''}`}>
+      <div className={`min-w-0 max-w-[80%] ${isUser ? 'text-right' : ''}`}>
         <div className={`rounded-lg px-4 py-3 ${
           isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
         }`}>
-          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+          <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
         </div>
         
         {/* Citations */}

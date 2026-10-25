@@ -55,14 +55,14 @@ export default function Subjects() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Subjects</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight">Subjects</h1>
           <p className="text-muted-foreground">Manage your study subjects</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger>
-            <Button>
+            <Button className="shrink-0">
               <Plus className="mr-2 h-4 w-4" />
               New Subject
             </Button>
@@ -118,14 +118,14 @@ export default function Subjects() {
       ) : (
         <div className="space-y-2">
           {subjects?.map((subject: Subject) => (
-            <Card key={subject.id} className="flex items-center justify-between">
-              <CardContent className="flex flex-1 items-center gap-4 px-6 py-4">
-                <div className="flex-1">
-                  <h3 className="font-semibold">{subject.name}</h3>
-                  {subject.description && <p className="text-sm text-muted-foreground">{subject.description}</p>}
+            <Card key={subject.id} className="flex items-center justify-between gap-4">
+              <CardContent className="flex min-w-0 flex-1 items-center gap-4 px-6 py-4">
+                <div className="min-w-0 flex-1">
+                  <h3 className="break-words font-semibold">{subject.name}</h3>
+                  {subject.description && <p className="break-words text-sm text-muted-foreground">{subject.description}</p>}
                 </div>
               </CardContent>
-              <div className="flex items-center gap-2 pr-6">
+              <div className="flex shrink-0 items-center gap-2 pr-6">
                 <Button
                   variant="ghost"
                   size="icon"

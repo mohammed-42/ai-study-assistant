@@ -131,11 +131,11 @@ export default function Layout() {
           </SidebarFooter>
         </Sidebar>
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="border-b px-6 py-3 flex items-center gap-4">
+          <header className="flex min-w-0 items-center gap-4 border-b px-4 py-3 sm:px-6">
             <SidebarTrigger />
-            <h1 className="text-lg font-semibold">{getHeading()}</h1>
+            <h1 className="truncate text-lg font-semibold">{getHeading()}</h1>
           </header>
-          <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto p-6">
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto p-4 sm:p-6">
             <Outlet />
           </main>
         </div>

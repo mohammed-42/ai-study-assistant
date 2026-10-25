@@ -52,12 +52,12 @@ export default function Tutor() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">AI Tutor</h1>
           <p className="text-muted-foreground">Ask questions about your study materials</p>
         </div>
-        <Button onClick={handleCreate} disabled={createMutation.isPending}>
+        <Button onClick={handleCreate} disabled={createMutation.isPending} className="shrink-0">
           <Plus className="h-4 w-4 mr-2" />
           New Chat
         </Button>

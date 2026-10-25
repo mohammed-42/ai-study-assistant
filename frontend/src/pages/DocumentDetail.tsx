@@ -101,14 +101,14 @@ export default function DocumentDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{document.name}</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-bold tracking-tight">{document.name}</h1>
           <p className="text-sm text-muted-foreground">
             Page {document.page_count} • Uploaded {new Date(document.created_at).toLocaleDateString()}
           </p>
         </div>
-        <Badge className={statusColors[document.status]}>
+        <Badge className={`shrink-0 ${statusColors[document.status]}`}>
           {document.status.toUpperCase()}
         </Badge>
       </div>

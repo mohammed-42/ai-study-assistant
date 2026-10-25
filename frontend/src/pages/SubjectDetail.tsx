@@ -1,13 +1,16 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/services/api'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft } from 'lucide-react'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { UploadDialog } from '@/components/upload-dialog'
+import { ArrowLeft, Upload } from 'lucide-react'
 import type { Subject } from '@/types'
 
 export default function SubjectDetail() {
   const { id } = useParams<{ id: string }>()
+  const [uploadOpen, setUploadOpen] = useState(false)
 
   const { data: subject, isLoading } = useQuery({
     queryKey: ['subject', id],
@@ -50,15 +53,21 @@ export default function SubjectDetail() {
         </Button>
       </Link>
 
-      <Card className="gap-4 p-6">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">{subject.name}</CardTitle>
+          <CardTitle className="break-words text-2xl">{subject.name}</CardTitle>
+          {subject.description && (
+            <CardDescription className="break-words">{subject.description}</CardDescription>
+          )}
+          <CardAction>
+            <Button onClick={() => setUploadOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" />
+              Upload
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
-          {subject.description && (
-            <p className="text-muted-foreground">{subject.description}</p>
-          )}
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3">
             <Link to="/documents" className={buttonVariants({ variant: 'outline' })}>
               Documents
             </Link>
@@ -71,6 +80,12 @@ export default function SubjectDetail() {
           </div>
         </CardContent>
       </Card>
+
+      <UploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        preselectedSubjectId={id}
+      />
     </div>
   )
 }
