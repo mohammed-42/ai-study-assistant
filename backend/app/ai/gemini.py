@@ -10,7 +10,12 @@ import google.generativeai as genai
 from google.generativeai import protos
 from google.generativeai.types import answer_types
 
-from app.ai.ocr import OcrProvider, OcrResult, OcrQuality
+from app.ai.ocr import (
+    OcrProvider,
+    OcrResult,
+    OcrQuality,
+    classify_ocr_provider_error,
+)
 from app.core.config import settings
 from app.core.resilience import call_with_retry
 
@@ -98,13 +103,8 @@ class GeminiOcrProvider(OcrProvider):
             )
 
         except Exception as exc:
-            logger.warning("Gemini OCR failed for page: %s", exc)
-            return OcrResult(
-                text="",
-                quality=OcrQuality.LOW,
-                flags=[f"error:{type(exc).__name__}"],
-                low_confidence=True,
-            )
+            logger.warning("Gemini OCR failed for page: %s", type(exc).__name__)
+            raise classify_ocr_provider_error(exc) from exc
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Batch-embed texts; raise instead of returning zero vectors on failure."""

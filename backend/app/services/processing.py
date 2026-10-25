@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.ocr import OcrProvider, OcrResult, flag_needs_review
+from app.ai.ocr import OcrProvider, OcrProviderError, OcrResult, flag_needs_review
 from app.ai.tesseract import TesseractOcrProvider
 from app.core.config import settings
 
@@ -24,6 +24,9 @@ EMBEDDING_UNAVAILABLE_MESSAGE = "Embedding service unavailable. Please retry."
 AI_NOT_CONFIGURED_MESSAGE = "AI service is not configured. Please retry after configuration."
 GENERIC_PROCESSING_ERROR_MESSAGE = "Processing failed. Please retry."
 DAILY_OCR_LIMIT_MESSAGE = "Daily OCR limit reached. Try again tomorrow or upload fewer pages."
+OCR_QUOTA_MESSAGE = "The OCR service is at its usage limit. Please try again later."
+OCR_BUSY_MESSAGE = "The OCR service is busy. Please retry in a few minutes."
+OCR_AUTH_MESSAGE = "OCR service is not configured correctly."
 OCR_RERUN_FAILED_MESSAGE = "Could not re-read this page. Please try again."
 OCR_RERUN_EMBED_FAILED_MESSAGE = "Could not embed the re-read page. Please try again."
 
@@ -35,6 +38,8 @@ class DocumentProcessingError(RuntimeError):
 def _safe_error_message(exc: Exception) -> str:
     if isinstance(exc, DocumentProcessingError):
         return str(exc)
+    if isinstance(exc, OcrProviderError):
+        return exc.public_message
     return GENERIC_PROCESSING_ERROR_MESSAGE
 
 
@@ -132,9 +137,9 @@ async def process_document(db: AsyncSession, document_id: str) -> None:
             job.last_error = safe_message
             job_finished = True
         try:
-            await _delete_document_chunks(db, doc.id)
+            await _clear_existing_pages_and_chunks(db, doc.id)
         except Exception:
-            logger.exception("Failed to clear chunks for failed document %s", document_id)
+            logger.exception("Failed to clear pages/chunks for failed document %s", document_id)
         logger.exception("Document %s processing failed: %s", document_id, safe_message)
         raise
     finally:
@@ -294,6 +299,8 @@ async def _process_pdf(db: AsyncSession, doc: Document) -> None:
                     else:
                         text = ""
                         needs_review = True
+                except OcrProviderError:
+                    raise
                 except Exception as exc:
                     logger.warning("OCR fallback failed for page %d of doc %s: %s", page_num + 1, doc.id, exc)
                     text = ""
@@ -529,12 +536,6 @@ async def embed_chunks(
         vectors = await provider.embed_texts(texts)
     except Exception as exc:
         logger.warning("Embedding generation failed: %s", type(exc).__name__)
-        reason = str(exc).lower()
-        if any(
-            marker in reason
-            for marker in ("api key", "api_key", "permission", "unauthorized", "401", "403")
-        ):
-            raise DocumentProcessingError(AI_NOT_CONFIGURED_MESSAGE) from exc
         raise DocumentProcessingError(EMBEDDING_UNAVAILABLE_MESSAGE) from exc
 
     if len(vectors) != len(chunks):
@@ -588,6 +589,8 @@ async def rerun_page_ocr(
 
     try:
         ocr_result = await provider.transcribe_page(image_bytes, mime_type)
+    except OcrProviderError:
+        raise
     except Exception as exc:
         logger.warning("Re-run OCR failed for page %s: %s", page.id, exc)
         raise DocumentProcessingError(OCR_RERUN_FAILED_MESSAGE) from exc

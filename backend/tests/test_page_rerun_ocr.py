@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.ai.ocr import OcrQuality, OcrResult
+from app.ai.ocr import OcrQuality, OcrQuotaError, OcrResult
 from app.api.deps import get_current_user
 from app.core.rate_limit import rate_limiter
 from app.main import app
@@ -172,6 +172,35 @@ async def test_rerun_ocr_failure_keeps_old_text_and_chunks(
 
     assert response.status_code == 502
     assert "Could not re-read" in response.json()["detail"]
+
+    db_session.expire_all()
+    refreshed = await db_session.get(DocumentPage, page_id)
+    assert refreshed.text == old_text
+    assert refreshed.source == "text_layer"
+    assert {chunk.id for chunk in await _chunks_for(db_session, doc_id)} == old_ids
+
+
+@pytest.mark.asyncio
+async def test_rerun_ocr_quota_returns_503_and_keeps_old_data(
+    db_session, test_user, test_subject, client, monkeypatch
+):
+    doc, page, old_chunks = await _seed_page(db_session, test_user, test_subject)
+    doc_id, page_id = doc.id, page.id
+    old_text = page.text
+    old_ids = {chunk.id for chunk in old_chunks}
+
+    _mock_storage(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.processing._get_ocr_provider",
+        lambda: _provider("", ocr_error=OcrQuotaError()),
+    )
+
+    response = client.post(f"/api/documents/{doc.id}/pages/{page.id}/rerun-ocr")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "The OCR service is at its usage limit. Please try again later."
+    )
 
     db_session.expire_all()
     refreshed = await db_session.get(DocumentPage, page_id)

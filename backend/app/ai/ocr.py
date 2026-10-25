@@ -27,6 +27,63 @@ class OcrResult:
     metadata: dict = field(default_factory=dict)
 
 
+class OcrProviderError(RuntimeError):
+    """A provider failure that must not be treated as empty OCR text."""
+
+    public_message = "The OCR service is busy. Please retry in a few minutes."
+
+
+class OcrQuotaError(OcrProviderError):
+    public_message = "The OCR service is at its usage limit. Please try again later."
+
+
+class OcrBusyError(OcrProviderError):
+    public_message = "The OCR service is busy. Please retry in a few minutes."
+
+
+class OcrAuthError(OcrProviderError):
+    public_message = "OCR service is not configured correctly."
+
+
+def classify_ocr_provider_error(exc: BaseException | None) -> OcrProviderError:
+    """Map a provider/SDK exception to a typed, user-safe OCR error."""
+    parts: list[str] = []
+    current: BaseException | None = exc
+    while current is not None:
+        parts.append(f"{type(current).__name__}: {current}")
+        current = current.__cause__
+    reason = " ".join(parts).lower()
+
+    if any(
+        marker in reason
+        for marker in (
+            "429",
+            "resourceexhausted",
+            "quota",
+            "rate limit",
+            "rate_limit",
+            "too many requests",
+            "billing",
+        )
+    ):
+        return OcrQuotaError()
+    if any(
+        marker in reason
+        for marker in (
+            "api key",
+            "api_key",
+            "invalid key",
+            "permission",
+            "unauthorized",
+            "unauthenticated",
+            "401",
+            "403",
+        )
+    ):
+        return OcrAuthError()
+    return OcrBusyError()
+
+
 class OcrProvider(ABC):
     """Interface for OCR providers."""
 

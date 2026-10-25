@@ -3,7 +3,7 @@
 ## Current state
 
 - **Phase:** 7 — Hardening. Code complete; live verification in progress.
-- **Backend tests:** 129/129 passing (mocked/hermetic).
+- **Backend tests:** 136/136 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
 - **Last updated:** 2026-10-25
 
@@ -29,7 +29,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 129 passed in 11.49s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 136 passed in 12.04s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Rate limits (upload, AI, re-embed) | UNIT-TESTED (mocked) | `tests/test_rate_limit.py`; process-local |
 | Signed page-image URLs | UNIT-TESTED (mocked) | `tests/test_storage_security.py` |
@@ -38,8 +38,9 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Embedding failure handling | UNIT-TESTED (mocked) | `embed_texts` raises; failed docs persist no chunks/zero vectors |
 | No-readable-text handling | UNIT-TESTED (mocked) | 0 pages, all-empty pages, and `[NO_TEXT]` → failed |
 | Scanned-PDF rendering at 200 DPI | UNIT-TESTED (mocked) | `test_scanned_pdf_renders_at_200_dpi`, `test_mixed_pdf_uses_text_layer_then_ocr` |
+| OCR/embedding provider error mapping | UNIT-TESTED (mocked) | `test_quota_error_fails_clearly_and_retry_succeeds`, `test_timeout_maps_to_busy_message`, `test_empty_ocr_text_is_no_readable_text`, `test_failed_ocr_pages_do_not_count_toward_daily_limit` |
 | OCR per-document and daily limits | UNIT-TESTED (mocked) | `test_over_per_document_ocr_cap_fails_without_calling_ocr`, `test_scanned_pdf_over_daily_limit_fails_without_calling_ocr`, `test_ocr_exactly_at_per_document_cap_passes` |
-| Re-run OCR for one page | UNIT-TESTED (mocked) | `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached` |
+| Re-run OCR for one page | UNIT-TESTED (mocked) | `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_quota_returns_503_and_keeps_old_data`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached` |
 | Retry after embedding failure | UNIT-TESTED (mocked) | Retry reaches ready without duplicate chunks |
 | Processing job state | IMPLEMENTED | Jobs set completed/failed; smoke cleanup shows 0 job rows |
 | PDF text extraction (PyMuPDF) | LIVE-VERIFIED | fitz 1.28.2 opened `samples/sample.pdf`: 3 pages, chars `[1935, 2198, 1205]` |
@@ -76,6 +77,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 - Handwriting smoke: LIVE-VERIFIED — 1 OCR page, 1 chunk, min_l2=0.592292, edit/re-embed marker top, cleanup OK.
 - Step 6 PDF smoke: LIVE-VERIFIED — ready, 3 pages, 2 chunks, min_l2=0.589452, cleanup OK.
 - Step 6 handwriting rerun-OCR: NOT VERIFIED — Gemini returned 429 quota exhausted; smoke reported `re-run OCR HTTP 502`, cleanup OK.
+- Step 6b live rerun-OCR: NOT VERIFIED — no live Gemini calls run (quota exhausted); covered by mocked tests only.
 - End-to-end smoke test: PARTIAL — PDF passed; handwriting rerun-OCR blocked by Gemini 429 quota; tutor/notes/quizzes/planner not exercised.
 - Migrations on a blank DB: NOT VERIFIED.
 - Tutor, notes, quizzes and planner against real Gemini: NOT VERIFIED.

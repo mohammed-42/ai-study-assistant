@@ -3,7 +3,14 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from app.ai.ocr import OcrResult, OcrQuality, flag_needs_review
+from app.ai.ocr import (
+    OcrAuthError,
+    OcrBusyError,
+    OcrQuotaError,
+    OcrResult,
+    OcrQuality,
+    flag_needs_review,
+)
 from app.ai.gemini import GeminiOcrProvider
 from app.ai.tesseract import TesseractOcrProvider
 
@@ -118,8 +125,8 @@ async def test_gemini_provider_transcribe_no_text():
 
 
 @pytest.mark.asyncio
-async def test_gemini_provider_transcribe_error_returns_low_conf():
-    """When Gemini call fails, returns low-confidence empty result."""
+async def test_gemini_provider_transcribe_error_raises_busy():
+    """When Gemini call fails, raise a typed busy error instead of empty text."""
     mock_model = MagicMock()
     mock_model.generate_content.side_effect = Exception("network error")
 
@@ -131,11 +138,44 @@ async def test_gemini_provider_transcribe_error_returns_low_conf():
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
-        result = await provider.transcribe_page(b"fake-image-bytes", "image/jpeg")
+        with pytest.raises(OcrBusyError):
+            await provider.transcribe_page(b"fake-image-bytes", "image/jpeg")
 
-    assert result.text == ""
-    assert result.low_confidence is True
-    assert len(result.flags) > 0
+
+@pytest.mark.asyncio
+async def test_gemini_provider_quota_error_is_typed():
+    """A 429/quota provider failure maps to OcrQuotaError."""
+    mock_model = MagicMock()
+    mock_model.generate_content.side_effect = Exception("429 ResourceExhausted: quota exceeded")
+
+    with patch("app.ai.gemini.genai.configure"), \
+         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+         patch("app.ai.gemini.settings") as mock_settings:
+        mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_TIMEOUT_SECONDS = 60
+        mock_settings.GEMINI_MAX_RETRIES = 0
+        provider = GeminiOcrProvider()
+        with pytest.raises(OcrQuotaError):
+            await provider.transcribe_page(b"fake-image-bytes", "image/jpeg")
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_bad_key_error_is_typed():
+    """An API-key failure maps to OcrAuthError."""
+    mock_model = MagicMock()
+    mock_model.generate_content.side_effect = Exception("API key not valid")
+
+    with patch("app.ai.gemini.genai.configure"), \
+         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+         patch("app.ai.gemini.settings") as mock_settings:
+        mock_settings.GEMINI_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_TIMEOUT_SECONDS = 60
+        mock_settings.GEMINI_MAX_RETRIES = 0
+        provider = GeminiOcrProvider()
+        with pytest.raises(OcrAuthError):
+            await provider.transcribe_page(b"fake-image-bytes", "image/jpeg")
 
 
 @pytest.mark.asyncio
