@@ -36,7 +36,7 @@ class GeminiOcrProvider(OcrProvider):
     """Uses Gemini 2.0 Flash multimodal to transcribe page images."""
 
     # Model name for embeddings (separate, used elsewhere)
-    EMBEDDING_MODEL = "gemini-embedding-001"
+    EMBEDDING_MODEL = settings.EMBEDDING_MODEL
 
     def __init__(self) -> None:
         api_key = settings.GEMINI_API_KEY

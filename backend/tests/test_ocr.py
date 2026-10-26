@@ -88,7 +88,7 @@ async def test_gemini_provider_transcribe_success():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_MODEL = "test-vision-model"
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
@@ -96,7 +96,7 @@ async def test_gemini_provider_transcribe_success():
 
     assert result.text == "Transcribed text here"
     assert result.low_confidence is False
-    assert provider.name == "gemini-2.5-flash"
+    assert provider.name == "test-vision-model"
 
 
 @pytest.mark.asyncio
@@ -113,7 +113,7 @@ async def test_gemini_provider_transcribe_no_text():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_MODEL = "test-vision-model"
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
@@ -134,7 +134,7 @@ async def test_gemini_provider_transcribe_error_raises_busy():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_MODEL = "test-vision-model"
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
@@ -152,7 +152,7 @@ async def test_gemini_provider_quota_error_is_typed():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_MODEL = "test-vision-model"
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
@@ -170,7 +170,7 @@ async def test_gemini_provider_bad_key_error_is_typed():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_MODEL = "test-vision-model"
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         provider = GeminiOcrProvider()
@@ -187,7 +187,7 @@ async def test_gemini_provider_embed_texts_raises_on_failure():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_MODEL = "test-vision-model"
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         mock_settings.EMBEDDING_MODEL = "gemini-embedding-001"
@@ -207,7 +207,7 @@ async def test_gemini_provider_embed_texts_rejects_zero_vector():
          patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.5-flash"
+        mock_settings.GEMINI_MODEL = "test-vision-model"
         mock_settings.GEMINI_TIMEOUT_SECONDS = 60
         mock_settings.GEMINI_MAX_RETRIES = 0
         mock_settings.EMBEDDING_MODEL = "gemini-embedding-001"

@@ -309,6 +309,9 @@ async def get_dashboard(
     task_stmt = select(StudyTask).where(
         StudyTask.scheduled_date == today,
         StudyTask.status == TaskStatus.PENDING,
+        StudyTask.plan_id.in_(
+            select(StudyPlan.id).where(StudyPlan.owner_id == user.id)
+        ),
     )
     today_tasks_result = await db.execute(task_stmt)
     today_tasks = today_tasks_result.scalars().all()
