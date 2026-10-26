@@ -118,8 +118,8 @@ export default function QuizTake() {
                             {!resp.is_correct && <p><span className="text-muted-foreground">Expected:</span> {resp.model_answer}</p>}
                           </div>
                         )}
-                        {q.explanation && (
-                          <p className="text-sm text-muted-foreground mt-2 italic">{q.explanation}</p>
+                        {resp.explanation && (
+                          <p className="text-sm text-muted-foreground mt-2 italic">{resp.explanation}</p>
                         )}
                       </div>
                     </div>

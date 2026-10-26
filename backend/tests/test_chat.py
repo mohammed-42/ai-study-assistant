@@ -1,6 +1,7 @@
 """Tests for chat/tutor API endpoints."""
 
 import json
+import uuid
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi.testclient import TestClient
@@ -339,6 +340,67 @@ async def test_answer_generation_with_retrieval(db_session, test_user, test_subj
         assert len(messages) == 2  # user + assistant
         assert messages[0]["role"] == "user"
         assert messages[1]["role"] == "assistant"
+
+
+@pytest.mark.asyncio
+async def test_generate_answer_without_chunks_returns_message():
+    """No retrieval hits should produce a clear insufficient-evidence answer."""
+    from app.rag.generator import generate_answer
+
+    result = await generate_answer("What is a component?", [])
+
+    assert result.is_insufficient is True
+    assert result.answer
+    assert result.citations == []
+
+
+@pytest.mark.asyncio
+async def test_generate_answer_propagates_quota_error():
+    """Quota errors must reach the API layer instead of becoming empty answers."""
+    from app.core.resilience import ExternalCallError
+    from app.rag.generator import generate_answer
+    from app.rag.retriever import RetrievalResult
+
+    chunk = RetrievalResult(
+        chunk_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        page_start=1,
+        page_end=1,
+        content="React components are functions.",
+        similarity=0.9,
+        document_name="sample.pdf",
+    )
+    quota_error = ExternalCallError("External service call failed: 429 quota exceeded")
+
+    with patch("app.rag.generator.genai") as mock_genai, patch(
+        "app.rag.generator.call_with_retry",
+        new=AsyncMock(side_effect=quota_error),
+    ):
+        mock_genai.GenerativeModel.return_value = MagicMock()
+        with pytest.raises(ExternalCallError):
+            await generate_answer("What is a component?", [chunk])
+
+
+@pytest.mark.asyncio
+async def test_post_message_quota_returns_503(db_session, test_user, client):
+    """The API returns 503 with a usage-limit message when Gemini is exhausted."""
+    from app.core.resilience import ExternalCallError
+
+    create_resp = client.post("/api/chat/sessions", json={"title": "Quota Chat"})
+    session_id = create_resp.json()["id"]
+    quota_error = ExternalCallError("External service call failed: 429 quota exceeded")
+
+    with patch(
+        "app.api.chat._generate_ai_response",
+        new=AsyncMock(side_effect=quota_error),
+    ):
+        response = client.post(
+            f"/api/chat/sessions/{session_id}/messages",
+            json={"content": "What is a component?"},
+        )
+
+    assert response.status_code == 503
+    assert "usage limit" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

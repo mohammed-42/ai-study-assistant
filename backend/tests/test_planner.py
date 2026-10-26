@@ -190,6 +190,51 @@ class TestGenerateSchedule:
         assert resp.status_code == 400
 
 
+class TestRegenerateSchedule:
+    @pytest.mark.asyncio
+    async def test_regenerate_preserves_completed_and_removes_duplicates(
+        self, client, test_user, db_session
+    ):
+        exam = date.today() + timedelta(days=14)
+        plan = await _create_plan(
+            db_session,
+            owner_id=test_user.id,
+            exam_date=exam,
+            topics=["Topic A", "Topic B"],
+        )
+        resp = client.post(f"/api/planner/plans/{plan.id}/generate")
+        assert resp.status_code == 200, resp.text
+        tasks = resp.json()
+        assert len(tasks) >= 2
+
+        done = tasks[0]
+        resp = client.put(
+            f"/api/planner/tasks/{done['id']}", json={"status": "completed"}
+        )
+        assert resp.status_code == 200, resp.text
+
+        resp = client.post(f"/api/planner/plans/{plan.id}/regenerate")
+        assert resp.status_code == 200, resp.text
+        regenerated = resp.json()
+
+        assert any(
+            t["id"] == done["id"] and t["status"] == "completed"
+            for t in regenerated
+        )
+        pending = [t["topic"] for t in regenerated if t["status"] != "completed"]
+        assert len(pending) == len(set(pending))
+
+        result = await db_session.execute(
+            select(StudyTask).where(StudyTask.plan_id == plan.id)
+        )
+        db_pending = [
+            t.topic
+            for t in result.scalars().all()
+            if t.status != TaskStatus.COMPLETED
+        ]
+        assert len(db_pending) == len(set(db_pending))
+
+
 class TestTaskUpdate:
     @pytest.mark.asyncio
     async def test_update_task_status(self, client, test_user, db_session):

@@ -360,3 +360,61 @@ class TestDeleteQuiz:
 
         response = client.get(f"/api/quizzes/{quiz_id}")
         assert response.status_code == 404
+
+
+class TestQuizAnswerKeyLeak:
+    @pytest.mark.asyncio
+    async def test_answer_keys_hidden_until_submit(
+        self, db_session, test_user, client, sample_document, sample_chunks
+    ):
+        mock_questions = [
+            {
+                "question_text": "What is photosynthesis?",
+                "question_type": "mcq",
+                "options": ["A) food", "B) sleep", "C) breathing", "D) eating"],
+                "correct_option_index": 0,
+                "explanation": "Secret explanation",
+            },
+            {
+                "question_text": "State the equation.",
+                "question_type": "short_answer",
+                "model_answer": "6CO2 + 6H2O",
+                "explanation": "Secret short explanation",
+            },
+        ]
+        with patch("app.services.quizzes.generate_quiz") as mock_gen:
+            mock_gen.return_value = {"questions": mock_questions}
+            gen_resp = client.post("/api/quizzes/generate", json={
+                "document_id": str(sample_document.id),
+                "title": "Leak Check",
+                "quiz_type": "mixed",
+                "difficulty": "easy",
+                "question_count": 2,
+            })
+        assert gen_resp.status_code == 201
+        quiz_id = gen_resp.json()["id"]
+
+        def assert_hidden(questions):
+            for q in questions:
+                assert q["correct_option_index"] is None
+                assert q["model_answer"] is None
+                assert q["explanation"] is None
+
+        assert_hidden(gen_resp.json()["questions"])
+        get_resp = client.get(f"/api/quizzes/{quiz_id}")
+        assert get_resp.status_code == 200
+        assert_hidden(get_resp.json()["questions"])
+
+        questions = get_resp.json()["questions"]
+        submit_resp = client.post(f"/api/quizzes/{quiz_id}/submit", json={
+            "responses": [
+                {"question_id": questions[0]["id"], "selected_option_index": 0},
+                {"question_id": questions[1]["id"], "user_answer": "6CO2 + 6H2O"},
+            ]
+        })
+        assert submit_resp.status_code == 201
+        responses = submit_resp.json()["responses"]
+        assert responses[0]["correct_option_index"] == 0
+        assert responses[0]["explanation"] == "Secret explanation"
+        assert responses[1]["model_answer"] == "6CO2 + 6H2O"
+        assert all(r["is_correct"] is True for r in responses)

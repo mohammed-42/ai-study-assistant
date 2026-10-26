@@ -38,7 +38,7 @@ async def retrieve_chunks(
     subject_id: uuid.UUID | None = None,
     document_ids: list[uuid.UUID] | None = None,
     top_k: int = 5,
-    min_similarity: float = 0.6,
+    min_similarity: float = 0.5,
 ) -> list[RetrievalResult]:
     """Retrieve relevant chunks using vector similarity search.
     

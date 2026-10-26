@@ -135,7 +135,7 @@ export default function QuizResults() {
                               )}
                             </p>
                           )}
-                          {q.explanation && <p className="text-xs text-muted-foreground italic mt-1">{q.explanation}</p>}
+                          {resp.explanation && <p className="text-xs text-muted-foreground italic mt-1">{resp.explanation}</p>}
                         </div>
                       </div>
                     )

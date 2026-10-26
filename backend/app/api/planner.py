@@ -210,6 +210,14 @@ async def regenerate_schedule(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
+    from sqlalchemy import delete as sa_delete
+    await db.execute(
+        sa_delete(StudyTask).where(
+            StudyTask.plan_id == plan.id,
+            StudyTask.status != TaskStatus.COMPLETED,
+        )
+    )
+
     inserted = []
     for task in new_tasks:
         if task.id is None:

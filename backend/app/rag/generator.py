@@ -10,6 +10,7 @@ from typing import Any
 import google.generativeai as genai
 from pydantic import BaseModel, Field
 
+from app.ai.ocr import OcrQuotaError, classify_ocr_provider_error
 from app.core.config import settings
 from app.core.resilience import call_with_retry
 from app.rag.retriever import RetrievalResult
@@ -42,6 +43,10 @@ class AnswerResponse(BaseModel):
 
 
 # Prompt for generating grounded answers
+_INSUFFICIENT_ANSWER = (
+    "I don't have enough information in the selected materials to answer that."
+)
+
 _ANSWER_PROMPT = """\
 You are an AI study assistant. Your task is to answer the user's question using ONLY the provided reference materials.
 
@@ -93,7 +98,7 @@ async def generate_answer(
     # Build reference text
     if not retrieved_chunks:
         return AnswerResult(
-            answer="",
+            answer=_INSUFFICIENT_ANSWER,
             citations=[],
             is_insufficient=True,
             error="No relevant chunks found"
@@ -160,14 +165,14 @@ async def generate_answer(
             len(validated_citations) == 0
         )
         
-        # If no valid citations but we have chunks, use first few as fallback
-        if not validated_citations and retrieved_chunks:
+        # Fallback citations only for sufficient answers.
+        if not is_insufficient and not validated_citations and retrieved_chunks:
             validated_citations = [str(c.chunk_id) for c in retrieved_chunks[:3]]
         
         answer_text = data.get("answer", "")
         
         if is_insufficient:
-            answer_text = "根据你上传的资料，目前没有找到足够的相关信息来回答这个问题。请尝试上传更多相关资料，或者换个角度提问。"
+            answer_text = _INSUFFICIENT_ANSWER
         
         return AnswerResult(
             answer=answer_text,
@@ -177,6 +182,8 @@ async def generate_answer(
     
     except Exception as exc:
         logger.error("Answer generation failed: %s", exc)
+        if isinstance(classify_ocr_provider_error(exc), OcrQuotaError):
+            raise
         return AnswerResult(
             answer="",
             citations=[],

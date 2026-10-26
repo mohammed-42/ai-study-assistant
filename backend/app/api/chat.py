@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.ocr import OcrQuotaError, classify_ocr_provider_error
 from app.api.deps import get_current_user
 from app.core.rate_limit import enforce_rate_limit
 from app.db.base import get_db
@@ -205,11 +206,16 @@ async def post_message(
         
     except Exception as exc:
         logger.error("AI response generation failed: %s", exc)
+        if isinstance(classify_ocr_provider_error(exc), OcrQuotaError):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The AI service is at its usage limit. Please try again later.",
+            ) from exc
         # Save error message
         error_msg = ChatMessage(
             session_id=session.id,
             role="assistant",
-            content="抱歉，服务暂时不可用，请稍后重试。",
+            content="The tutor is temporarily unavailable. Please try again.",
             is_insufficient=True,
         )
         db.add(error_msg)
@@ -268,7 +274,7 @@ async def _generate_ai_response(
     subject_id: uuid.UUID | None = None,
     document_ids: list[uuid.UUID] | None = None,
     top_k: int = 5,
-    min_similarity: float = 0.6,
+    min_similarity: float = 0.5,
     stream: bool = False,
 ) -> AnswerResult:
     """Generate AI response with RAG retrieval."""

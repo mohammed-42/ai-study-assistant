@@ -2,8 +2,8 @@
 
 ## Current state
 
-- **Phase:** 7 — Hardening. Code complete; live verification in progress.
-- **Backend tests:** 136/136 passing (mocked/hermetic).
+- **Phase:** 7 — Hardening. Code complete; live verification partial (Gemini daily quota blocks final planner rerun).
+- **Backend tests:** 160/160 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
 - **Last updated:** 2026-10-26
 
@@ -19,7 +19,7 @@
 | 4 | Tutor: RAG retrieval, grounded answers with citations, chat UI | DONE |
 | 5 | Notes + Quizzes: generation, grading, attempts, UI | DONE |
 | 6 | Planner + Dashboard: rule-based schedule, tasks, stats | DONE |
-| 7 | Hardening: rate limits, signed URLs, storage cleanup, resilience, docs | Code complete; live verification in progress |
+| 7 | Hardening: rate limits, signed URLs, storage cleanup, resilience, docs | Code complete; live verification partial (Gemini daily quota) |
 
 OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flash`).
 
@@ -29,7 +29,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 155 passed in 37.18s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 160 passed in 13.30s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
@@ -53,12 +53,15 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | JWKS | LIVE-VERIFIED | Key fetched from configured JWKS endpoint |
 | Gemini text, vision, embedding | LIVE-VERIFIED | Text and vision passed; `gemini-embedding-001` returned 768 dims with `output_dimensionality=768` |
 | Supabase login | LIVE-VERIFIED | Login succeeded |
-| End-to-end smoke test | PARTIAL | PDF path LIVE-VERIFIED; handwriting rerun-OCR LIVE-VERIFIED (HTTP 200, text_length=207, old_chunks_remaining=0, min_l2=0.590280, cleanup OK); tutor/notes/quizzes/planner not exercised |
+| End-to-end smoke test | PARTIAL | Batch 2 live smoke: PDF upload ready (3 pages, 2 chunks), tutor/notes/quizzes LIVE-VERIFIED, planner PARTIAL; cleanup rows/storage=0 and counts before=after in the tutor/notes/quizzes runs; one planner run left a chat session after a transient connection reset (manually cleaned). Final rerun stopped at tutor with Gemini daily quota 429 (20/day), so the full-script planner dashboard check was not repeated. Logs: `logs/step10_features_retry*.log`, `logs/server_step10.err.log`. |
 | Tailwind 3 compatibility | UNIT-TESTED (mocked) | No v4-only utility matches remain; `tailwindcss 3.4.10` build exit 0; CSS contains card spacing, 3px ring, 2px blur, `has-`/`data-` variants |
 | Upload dialog | NOT VERIFIED | New dialog supports one PDF or 2-20 images, reorder/remove, client validation, status polling, and privacy/OCR notices; `tsc`/build exit 0; browser UI not exercised |
 | Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
 | Migrations on a blank DB | NOT VERIFIED | — |
-| Tutor, notes, quizzes, planner against real Gemini | NOT VERIFIED | — |
+| Tutor against real Gemini | LIVE-VERIFIED | `smoke_features.py`: "What is a component?" -> answer_length=187, citations=1 (`sample.pdf p1`); off-topic question -> `is_insufficient=True`, citations=0; follow-up -> answer_length=385, citations=1. |
+| Notes against real Gemini | LIVE-VERIFIED | Summary/key_concepts/definitions/revision all HTTP 201, content lengths 1565/1790/1596/4124, saved=True, raw_json=False; edit persisted; delete HTTP 204 then GET 404. |
+| Quizzes against real Gemini | LIVE-VERIFIED | Generate/list/get hide `correct_option_index`, `model_answer`, `explanation`; mixed quiz 3 questions; all-correct=100, all-wrong=0; summary attempts=2 avg=50.0 best=100; short-answer paraphrase correct, unrelated answer incorrect. |
+| Planner against real Gemini | PARTIAL | Create plan, generate 3 tasks (max 45 min/day, within exam window), mark done, regenerate preserved completed. Observed duplicate pending topics before fix; dashboard returned HTTP 500 in full run (transient), targeted dashboard returned 200 with `active_plans=1`, `today_pending=2`, `progress total=5 completed=1` after. Regenerate fix unit-tested; full-script dashboard rerun blocked by Gemini daily quota. |
 | Browser UI test | NOT VERIFIED | — |
 
 ### Step 5 — readiness and embedding failures
@@ -85,9 +88,13 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 - Step 6 handwriting rerun-OCR: NOT VERIFIED — Gemini returned 429 quota exhausted; smoke reported `re-run OCR HTTP 502`, cleanup OK.
 - Step 6b live rerun-OCR: NOT VERIFIED — no live Gemini calls run (quota exhausted); covered by mocked tests only.
 - Step 7 docs/secret scan: no live Gemini calls; git history contains no real secrets; `tsc` and build exit 0; upload notices added but browser UI NOT VERIFIED.
-- End-to-end smoke test: PARTIAL — PDF passed; handwriting rerun-OCR blocked by Gemini 429 quota; tutor/notes/quizzes/planner not exercised.
+- End-to-end smoke test: PARTIAL — PDF and handwriting rerun-OCR passed; Batch 2 tutor/notes/quizzes LIVE-VERIFIED; planner PARTIAL; final rerun blocked by Gemini daily quota (20/day).
 - Migrations on a blank DB: NOT VERIFIED.
-- Tutor, notes, quizzes and planner against real Gemini: NOT VERIFIED.
+- Tutor live smoke: LIVE-VERIFIED - grounded answer length=187 citations=1; insufficient answer length=73 citations=0; follow-up length=385 citations=1.
+- Notes live smoke: LIVE-VERIFIED - four note types HTTP 201, saved/retrievable, raw JSON envelope absent; edit/delete OK.
+- Quizzes live smoke: LIVE-VERIFIED - answer keys hidden pre-submit; 100/0 attempts; summary avg=50.0 best=100; short-answer grading correct.
+- Planner live smoke: PARTIAL - create/generate/mark/regenerate OK; duplicate pending topics found and fixed; dashboard HTTP 500 in full run, targeted dashboard 200 after; final rerun blocked by quota.
+- Batch 2 quota stop: Gemini free tier `gemini-3.6-flash` daily generate-content limit 20/day exhausted; server logged 429 ResourceExhausted; no further live calls attempted.
 - Browser UI test: NOT VERIFIED.
 
 Gemini model facts observed live:
@@ -109,6 +116,7 @@ The live DB already holds non-test data. Smoke tests may delete only what they c
 - Test migrations on a blank DB.
 - Resume-from-failed-page remains open.
 - `POST /documents/{id}/retry` resets a failed document to `uploaded` but does not enqueue processing; the processing retry path itself is unit-tested.
+- Gemini free tier daily limit for `gemini-3.6-flash` is 20 generate-content requests/day. Wait for reset, then rerun `backend/scripts/smoke_features.py` to verify the planner dashboard and regenerate fix end-to-end.
 
 ---
 
@@ -125,6 +133,10 @@ The live DB already holds non-test data. Smoke tests may delete only what they c
 | Auth | Supabase JWT via JWKS | Backend verifies access tokens |
 | Storage | Supabase private bucket + signed URLs | Page images are private |
 | Quiz grading | Rule-based | MCQ exact match; short answer keyword overlap |
+| Quiz answer keys | Stripped from generate/list/get until submit | Prevent pre-submit answer-key leaks |
+| Tutor retrieval threshold | `min_similarity` default 0.5 | Live sample query max similarity 0.5607; 0.6 returned no chunks and empty answers |
+| Tutor no-evidence path | Non-empty insufficient answer, no fallback citations | Avoid empty assistant messages and misleading citations |
+| Planner regenerate | Delete pending/in-progress tasks before inserting replacements | Preserve completed tasks without duplicate pending topics |
 | Dev DB | SQLite; Postgres + pgvector for live | Docker not required locally |
 | PDF extraction | PyMuPDF (`fitz`) | Verified locally on `samples/sample.pdf` |
 | SQLAlchemy | 2.0.55 (pinned) | 2.1.x Cython extensions blocked on this machine |
@@ -226,8 +238,8 @@ backend/
     rag/ (generator.py, retriever.py)
     schemas/ (chat.py, document.py, note.py, planner.py, quiz.py, subject.py)
     services/ (notes.py, planner.py, processing.py, quizzes.py, storage.py)
-  scripts/ (smoke_test.py)
-  tests/ (conftest.py, test_chat.py, test_config.py, test_documents.py, test_jwks.py, test_notes_quizzes.py, test_ocr.py, test_planner.py, test_rate_limit.py, test_resilience.py, test_storage_security.py, test_subjects.py)
+  scripts/ (smoke_test.py, smoke_features.py)
+  tests/ (conftest.py, test_chat.py, test_config.py, test_documents.py, test_isolation.py, test_jwks.py, test_notes_quizzes.py, test_ocr.py, test_planner.py, test_rate_limit.py, test_resilience.py, test_storage_security.py, test_subjects.py)
 frontend/
   .env.example
   components.json

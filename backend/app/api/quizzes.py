@@ -34,6 +34,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/quizzes", tags=["quizzes"])
 
 
+def _question_payload(q: QuizQuestion) -> dict:
+    """Public question fields; answer keys are returned only after submit."""
+    return {
+        "id": str(q.id),
+        "quiz_id": str(q.quiz_id),
+        "question_text": q.question_text,
+        "question_type": q.question_type,
+        "options": json.loads(q.options) if q.options else None,
+        "correct_option_index": None,
+        "model_answer": None,
+        "document_id": str(q.document_id) if q.document_id else None,
+        "page_start": q.page_start,
+        "page_end": q.page_end,
+        "explanation": None,
+        "order": q.order,
+        "created_at": q.created_at.isoformat(),
+    }
+
+
 # --- List / Create ---
 
 @router.get("", response_model=list[dict])
@@ -180,7 +199,7 @@ async def generate_quiz(
     await db.commit()
     await db.refresh(quiz)
 
-    # Load questions for response (strip keys from list view, include in get)
+    # Load questions for response; answer keys are withheld until submit.
     q_result = await db.execute(
         select(QuizQuestion).where(QuizQuestion.quiz_id == quiz.id).order_by(QuizQuestion.order)
     )
@@ -198,28 +217,11 @@ async def generate_quiz(
         "status": quiz.status,
         "created_at": quiz.created_at.isoformat(),
         "updated_at": quiz.updated_at.isoformat(),
-        "questions": [
-            {
-                "id": str(q.id),
-                "quiz_id": str(q.quiz_id),
-                "question_text": q.question_text,
-                "question_type": q.question_type,
-                "options": json.loads(q.options) if q.options else None,
-                "correct_option_index": q.correct_option_index,
-                "model_answer": q.model_answer,
-                "document_id": str(q.document_id) if q.document_id else None,
-                "page_start": q.page_start,
-                "page_end": q.page_end,
-                "explanation": q.explanation,
-                "order": q.order,
-                "created_at": q.created_at.isoformat(),
-            }
-            for q in quiz_questions
-        ],
+        "questions": [_question_payload(q) for q in quiz_questions],
     }
 
 
-# --- Get (with full question details including answers) ---
+# --- Get (answer keys withheld until submit) ---
 
 @router.get("/{quiz_id}", response_model=dict)
 async def get_quiz(
@@ -227,7 +229,7 @@ async def get_quiz(
     db: AsyncSession = Depends(get_db),
     user: Profile = Depends(get_current_user),
 ):
-    """Get a quiz with full details including answer keys (owner only)."""
+    """Get a quiz owned by the current user; answer keys are withheld."""
     quiz = await _get_owner_quiz(db, uuid.UUID(quiz_id), user.id)
     q_result = await db.execute(
         select(QuizQuestion).where(QuizQuestion.quiz_id == quiz.id).order_by(QuizQuestion.order)
@@ -246,24 +248,7 @@ async def get_quiz(
         "status": quiz.status,
         "created_at": quiz.created_at.isoformat(),
         "updated_at": quiz.updated_at.isoformat(),
-        "questions": [
-            {
-                "id": str(q.id),
-                "quiz_id": str(q.quiz_id),
-                "question_text": q.question_text,
-                "question_type": q.question_type,
-                "options": json.loads(q.options) if q.options else None,
-                "correct_option_index": q.correct_option_index,
-                "model_answer": q.model_answer,
-                "document_id": str(q.document_id) if q.document_id else None,
-                "page_start": q.page_start,
-                "page_end": q.page_end,
-                "explanation": q.explanation,
-                "order": q.order,
-                "created_at": q.created_at.isoformat(),
-            }
-            for q in questions
-        ],
+        "questions": [_question_payload(q) for q in questions],
     }
 
 
@@ -328,7 +313,10 @@ async def submit_quiz(
         if q.question_type == "mcq":
             selected = resp_data.get("selected_option_index")
             from app.services.quizzes import grade_mcq
-            grade = grade_mcq(selected, q.correct_option_index or -1)
+            grade = grade_mcq(
+                selected,
+                q.correct_option_index if q.correct_option_index is not None else -1,
+            )
             is_correct = grade.is_correct
         else:
             user_ans = resp_data.get("user_answer", "")
