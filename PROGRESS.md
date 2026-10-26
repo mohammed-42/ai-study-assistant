@@ -42,7 +42,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Scanned-PDF rendering at 200 DPI | UNIT-TESTED (mocked) | `test_scanned_pdf_renders_at_200_dpi`, `test_mixed_pdf_uses_text_layer_then_ocr` |
 | OCR/embedding provider error mapping | UNIT-TESTED (mocked) | `test_quota_error_fails_clearly_and_retry_succeeds`, `test_timeout_maps_to_busy_message`, `test_empty_ocr_text_is_no_readable_text`, `test_failed_ocr_pages_do_not_count_toward_daily_limit` |
 | OCR per-document and daily limits | UNIT-TESTED (mocked) | `test_over_per_document_ocr_cap_fails_without_calling_ocr`, `test_scanned_pdf_over_daily_limit_fails_without_calling_ocr`, `test_ocr_exactly_at_per_document_cap_passes` |
-| Re-run OCR for one page | UNIT-TESTED (mocked) | `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_quota_returns_503_and_keeps_old_data`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached` |
+| Re-run OCR for one page | LIVE-VERIFIED | Live handwriting smoke: upload status=uploaded/ready in 31.8s; rerun-ocr HTTP 200; new text length=207; old_chunks_remaining=0; new_chunk_count=1 min_l2=0.590280; cleanup documents/chunks/pages/jobs=0 and profiles/subjects/chat_sessions/study_plans equal (3/2/2/1). Mocked tests: `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_quota_returns_503_and_keeps_old_data`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached` |
 | Retry after embedding failure | UNIT-TESTED (mocked) | Retry reaches ready without duplicate chunks |
 | Processing job state | IMPLEMENTED | Jobs set completed/failed; smoke cleanup shows 0 job rows |
 | PDF text extraction (PyMuPDF) | LIVE-VERIFIED | fitz 1.28.2 opened `samples/sample.pdf`: 3 pages, chars `[1935, 2198, 1205]` |
@@ -52,7 +52,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | JWKS | LIVE-VERIFIED | Key fetched from configured JWKS endpoint |
 | Gemini text, vision, embedding | LIVE-VERIFIED | Text and vision passed; `gemini-embedding-001` returned 768 dims with `output_dimensionality=768` |
 | Supabase login | LIVE-VERIFIED | Login succeeded |
-| End-to-end smoke test | PARTIAL | PDF path LIVE-VERIFIED; handwriting rerun-OCR NOT VERIFIED (Gemini 429 quota); tutor/notes/quizzes/planner not exercised |
+| End-to-end smoke test | PARTIAL | PDF path LIVE-VERIFIED; handwriting rerun-OCR LIVE-VERIFIED (HTTP 200, text_length=207, old_chunks_remaining=0, min_l2=0.590280, cleanup OK); tutor/notes/quizzes/planner not exercised |
 | Tailwind 3 compatibility | UNIT-TESTED (mocked) | No v4-only utility matches remain; `tailwindcss 3.4.10` build exit 0; CSS contains card spacing, 3px ring, 2px blur, `has-`/`data-` variants |
 | Upload dialog | NOT VERIFIED | New dialog supports one PDF or 2-20 images, reorder/remove, client validation, status polling, and privacy/OCR notices; `tsc`/build exit 0; browser UI not exercised |
 | Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
