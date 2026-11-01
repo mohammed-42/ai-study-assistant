@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/toast'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
@@ -19,6 +19,8 @@ import QuizTake from '@/pages/QuizTake'
 import QuizResults from '@/pages/QuizResults'
 import Planner from '@/pages/Planner'
 import PlanDetail from '@/pages/PlanDetail'
+import Settings from '@/pages/Settings'
+import NotFound from '@/pages/NotFound'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +44,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
   return <>{children}</>
+}
+
+function StudyPlannerAlias() {
+  const { id } = useParams<{ id: string }>()
+  return <Navigate to={id ? `/planner/${id}` : '/planner'} replace />
 }
 
 export default function App() {
@@ -74,8 +81,12 @@ export default function App() {
               <Route path="quizzes/:id/results" element={<QuizResults />} />
               <Route path="planner" element={<Planner />} />
               <Route path="planner/:id" element={<PlanDetail />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/study-planner" element={<Navigate to="/planner" replace />} />
+            <Route path="/study-planner/:id" element={<StudyPlannerAlias />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
           <Toaster />
         </AuthProvider>

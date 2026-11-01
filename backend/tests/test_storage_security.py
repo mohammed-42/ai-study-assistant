@@ -11,6 +11,7 @@ from app.main import app
 from app.models.document import Document, DocumentStatus
 from app.models.document_page import DocumentPage
 from app.models.profile import Profile
+from app.services.storage import delete_user_objects
 
 
 @pytest.fixture
@@ -171,4 +172,27 @@ async def test_delete_document_removes_rendered_page_images(
     assert response.status_code == 204
     bucket.remove.assert_called_once_with(
         [f"{folder}/scanned.pdf", f"{folder}/page_1.jpg"]
+    )
+
+
+def test_delete_user_objects_removes_nested_user_files(monkeypatch):
+    owner_id = uuid.uuid4()
+    root = f"user/{owner_id}"
+    folder = f"{root}/document-id"
+    storage = MagicMock()
+    bucket = storage.storage.from_.return_value
+    bucket.list.side_effect = lambda path: {
+        root: [{"name": "document-id", "id": None}],
+        folder: [
+            {"name": "notes.pdf", "id": "file-1"},
+            {"name": "page_1.jpg", "id": "file-2"},
+        ],
+    }[path]
+
+    monkeypatch.setattr("app.services.storage.storage_is_configured", lambda: True)
+    monkeypatch.setattr("app.services.storage.get_storage_client", lambda: storage)
+
+    assert delete_user_objects(owner_id) == 2
+    bucket.remove.assert_called_once_with(
+        [f"{folder}/notes.pdf", f"{folder}/page_1.jpg"]
     )

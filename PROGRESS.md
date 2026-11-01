@@ -4,9 +4,9 @@
 
 - **Phase:** 7 — Hardening. Code complete; live verification partial (Gemini daily quota blocks final planner rerun).
 - **Live verification:** tutor, notes, quizzes LIVE-VERIFIED; planner PARTIAL; full smoke stopped on Gemini 429 daily quota.
-- **Backend tests:** 175/175 passing (mocked/hermetic).
+- **Backend tests:** 184/184 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** pending `feat: page images for scanned PDFs, side-by-side OCR review`.
+- **Latest commit:** pending `feat: settings, account deletion, not-found page, route aliases`.
 - **Session:** Paused on 2026-10-26 after Gemini free-tier quota exhaustion; resume by rerunning `backend/scripts/smoke_features.py` after quota reset.
 - **Last updated:** 2026-11-01
 
@@ -32,7 +32,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 175 passed in 54.93s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` -> 184 passed in 53.17s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
@@ -64,6 +64,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
 | Document retry/delete/filter/pagination | UNIT-TESTED (mocked) | Backend list accepts `subject_id`/`limit`/`offset`; defaults preserve unpaginated behavior (`test_list_documents_paginated`, `test_list_documents_filtered_pagination`). Subject filtering is server-side before pagination. Documents page adds 10-row pagination, failed-only retry with error text and polling, delete confirmation; detail header adds failed-only retry and delete with polling. `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Scanned PDF page images + side-by-side review | UNIT-TESTED (mocked) | OCR-rendered PDF pages are saved as JPEG quality 85 under `user/<owner>/<document>/page_<n>.jpg`; text-layer pages have no image; rerun OCR succeeds from the saved image; document delete removes page images. DocumentDetail shows the signed image left and text/controls right, with skeleton, retry, full-size link, and vertical stacking below `md`. `tsc`/build exit 0; browser UI NOT VERIFIED |
+| Settings, account deletion, not-found, aliases | UNIT-TESTED (mocked) | `PUT /api/profile` trims/validates full name, ignores email changes, and updates only the current user; `GET /api/profile` returns the current profile. `DELETE /api/account` removes user storage objects, deletes the profile (FK cascade), then deletes the Supabase auth user with the backend-only service role key; storage/auth failures return explicit messages describing any partial state. Settings page has read-only email, editable full name, log out, and typed `DELETE` confirmation; sidebar Settings link, not-found page, and `/dashboard` + `/study-planner` aliases added. `pytest -q` -> 184 passed in 53.17s; `tsc` exit 0; `npm run build` exit 0; no live calls; browser UI NOT VERIFIED |
 | Migrations on a blank DB | NOT VERIFIED | — |
 | Tutor against real Gemini | LIVE-VERIFIED | `smoke_features.py`: "What is a component?" -> answer_length=187, citations=1 (`sample.pdf p1`); off-topic question -> `is_insufficient=True`, citations=0; follow-up -> answer_length=385, citations=1. |
 | Resolved tutor citations | UNIT-TESTED (mocked) | `tests/test_citations.py`: database resolves document name, page range, OCR/needs_review/user_edited flags; invalid/foreign chunk IDs dropped; API and history return citation objects, not chunk IDs. Browser UI NOT VERIFIED. |

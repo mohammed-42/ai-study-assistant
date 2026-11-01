@@ -1,4 +1,4 @@
-import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest, Note, NoteCreate, Quiz, QuizAttempt, QuizSummary, QuizGenerateRequest, QuizSubmitRequest, StudyPlan, StudyPlanCreate, StudyPlanUpdate, StudyTask, StudyTaskUpdate, DashboardData } from '@/types'
+import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest, Note, NoteCreate, Quiz, QuizAttempt, QuizSummary, QuizGenerateRequest, QuizSubmitRequest, StudyPlan, StudyPlanCreate, StudyPlanUpdate, StudyTask, StudyTaskUpdate, DashboardData, UserProfile } from '@/types'
 import { getAccessToken } from './supabase'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
@@ -24,6 +24,17 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   if (response.status === 204) return undefined as T
   return response.json()
+}
+
+// Profile APIs
+export const profileApi = {
+  get: () => apiFetch<UserProfile>('/profile'),
+  update: (fullName: string) =>
+    apiFetch<UserProfile>('/profile', {
+      method: 'PUT',
+      body: JSON.stringify({ full_name: fullName }),
+    }),
+  deleteAccount: () => apiFetch<void>('/account', { method: 'DELETE' }),
 }
 
 // Document APIs

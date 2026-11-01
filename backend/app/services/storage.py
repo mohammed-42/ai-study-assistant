@@ -50,6 +50,37 @@ def create_signed_url(storage_key: str, expires_in: int = 3600) -> str:
     return url
 
 
+def delete_user_objects(owner_id: uuid.UUID) -> int:
+    """Delete every storage object under a user's folder.
+
+    Raises on storage errors so account deletion can stop and report the
+    failure instead of silently leaving files behind.
+    """
+    if not storage_is_configured():
+        return 0
+
+    storage = get_storage_client()
+    bucket = storage.storage.from_(settings.STORAGE_BUCKET)
+    keys = _list_object_keys(bucket, f"user/{owner_id}")
+    if keys:
+        bucket.remove(keys)
+    return len(keys)
+
+
+def _list_object_keys(bucket: Any, prefix: str) -> list[str]:
+    keys: list[str] = []
+    for item in bucket.list(prefix):
+        name = item.get("name")
+        if not name:
+            continue
+        path = f"{prefix}/{name}"
+        if item.get("id") is None:
+            keys.extend(_list_object_keys(bucket, path))
+        else:
+            keys.append(path)
+    return keys
+
+
 def delete_document_objects(
     owner_id: uuid.UUID,
     document_id: uuid.UUID,

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health_router, subjects_router, documents_router, upload_router, pages_router, chat_router, notes_router, quizzes_router, planner_router
+from app.api import health_router, subjects_router, documents_router, upload_router, pages_router, chat_router, notes_router, quizzes_router, planner_router, profile_router
 from app.core.config import settings, validate_runtime_config
 
 
@@ -44,3 +44,4 @@ app.include_router(chat_router)
 app.include_router(notes_router, prefix="")
 app.include_router(quizzes_router, prefix="")
 app.include_router(planner_router, prefix="")
+app.include_router(profile_router, prefix="/api")

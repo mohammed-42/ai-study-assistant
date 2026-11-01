@@ -21,6 +21,7 @@ import {
   PenLine,
   CircleHelp,
   CalendarDays,
+  Settings as SettingsIcon,
 } from 'lucide-react'
 
 export default function Layout() {
@@ -42,6 +43,7 @@ export default function Layout() {
     if (p === '/notes' || p.startsWith('/notes/')) return 'Notes'
     if (p === '/quizzes' || p.startsWith('/quizzes/')) return 'Quizzes'
     if (p === '/planner' || p.startsWith('/planner/')) return 'Study Planner'
+    if (p === '/settings') return 'Settings'
     return 'Study Assistant'
   }
 
@@ -108,6 +110,14 @@ export default function Layout() {
                   <Link to="/planner" className="flex items-center gap-3">
                     <CalendarDays className="h-4 w-4" />
                     <span>Planner</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Settings">
+                  <Link to="/settings" className="flex items-center gap-3">
+                    <SettingsIcon className="h-4 w-4" />
+                    <span>Settings</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

@@ -23,9 +23,17 @@ from app.models.processing_job import ProcessingJob  # noqa: E402
 @pytest.fixture
 async def db_session():
     """Fresh in-memory DB per test."""
+    from sqlalchemy import event
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
     test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+
+    @event.listens_for(test_engine.sync_engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
