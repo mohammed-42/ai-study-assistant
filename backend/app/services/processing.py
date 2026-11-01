@@ -509,25 +509,85 @@ async def _count_pages(db: AsyncSession, doc_id: uuid.UUID) -> int:
     return len(result.scalars().all())
 
 
+CHARS_PER_TOKEN = 4
+TINY_PAGE_RATIO = 0.3
+BOUNDARY_SEARCH_RATIO = 0.5
+SENTENCE_BOUNDARIES = (". ", "! ", "? ", ".\n", "!\n", "?\n")
+
+
+def _chunk_limits(
+    chunk_size: int | None = None, overlap: int | None = None
+) -> tuple[int, int]:
+    """Resolve token limits and validate their relationship."""
+    target_tokens = settings.CHUNK_TARGET_TOKENS if chunk_size is None else chunk_size
+    overlap_tokens = settings.CHUNK_OVERLAP_TOKENS if overlap is None else overlap
+    if target_tokens <= 0:
+        raise ValueError("chunk_size must be greater than 0")
+    if not 0 <= overlap_tokens < target_tokens:
+        raise ValueError("overlap must be at least 0 and less than chunk_size")
+    return target_tokens * CHARS_PER_TOKEN, overlap_tokens * CHARS_PER_TOKEN
+
+
+def _find_boundary(text: str, start: int, hard_end: int) -> int:
+    """Find a paragraph/sentence break in the second half of the window."""
+    minimum = start + max(1, int((hard_end - start) * BOUNDARY_SEARCH_RATIO))
+
+    paragraph = text.rfind("\n\n", minimum, hard_end)
+    if paragraph != -1:
+        return paragraph + 2
+
+    best = -1
+    best_length = 0
+    for separator in SENTENCE_BOUNDARIES:
+        index = text.rfind(separator, minimum, hard_end)
+        if index > best:
+            best = index
+            best_length = len(separator)
+    if best != -1:
+        return best + best_length
+
+    newline = text.rfind("\n", minimum, hard_end)
+    if newline != -1:
+        return newline + 1
+
+    return hard_end
+
+
 def _iter_chunks_with_spans(
-    text: str, chunk_size: int = 800, overlap: int = 120
+    text: str,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
 ) -> list[tuple[str, int, int]]:
     """Split text into chunks while retaining each chunk's character span."""
-    chars_per_token = 4
-    chunk_chars = chunk_size * chars_per_token
-    overlap_chars = overlap * chars_per_token
-
+    chunk_chars, overlap_chars = _chunk_limits(chunk_size, overlap)
     chunks: list[tuple[str, int, int]] = []
     start = 0
+
     while start < len(text):
-        end = start + chunk_chars
-        chunks.append((text[start:end], start, min(end, len(text))))
-        start = end - overlap_chars
+        hard_end = min(start + chunk_chars, len(text))
+        end = hard_end
+        if hard_end < len(text):
+            end = _find_boundary(text, start, hard_end)
+            if end <= start:
+                end = hard_end
+
+        chunk = text[start:end]
+        if chunk.strip():
+            chunks.append((chunk, start, end))
+
+        if end >= len(text):
+            break
+        next_start = max(0, end - overlap_chars)
+        start = next_start if next_start > start else end
 
     return chunks
 
 
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[str]:
+def chunk_text(
+    text: str,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+) -> list[str]:
     """Split text into token-aware chunks (approximate using chars)."""
     return [
         chunk
@@ -557,38 +617,90 @@ def _page_range_for_span(
     return previous, previous
 
 
+def _group_pages_for_chunks(
+    pages: list[DocumentPage], chunk_chars: int
+) -> list[list[DocumentPage]]:
+    """Keep normal pages separate and merge tiny pages with a neighbor."""
+    usable = [page for page in pages if (page.text or "").strip()]
+    tiny_chars = max(1, int(chunk_chars * TINY_PAGE_RATIO))
+    blocks: list[list[DocumentPage]] = []
+    index = 0
+
+    while index < len(usable):
+        text = (usable[index].text or "").strip()
+        if len(text) >= tiny_chars:
+            blocks.append([usable[index]])
+            index += 1
+            continue
+
+        if index == len(usable) - 1 and blocks:
+            blocks[-1].append(usable[index])
+            index += 1
+            continue
+
+        block = [usable[index]]
+        block_chars = len(text)
+        index += 1
+        while index < len(usable) and block_chars < tiny_chars:
+            next_text = (usable[index].text or "").strip()
+            block.append(usable[index])
+            block_chars += len(next_text) + 2
+            index += 1
+        blocks.append(block)
+
+    return blocks
+
+
+def _block_text_and_spans(
+    block: list[DocumentPage],
+) -> tuple[str, list[tuple[int, int, int]]]:
+    """Join a page block and map character offsets back to page numbers."""
+    texts: list[str] = []
+    spans: list[tuple[int, int, int]] = []
+    offset = 0
+    for page in block:
+        text = (page.text or "").strip()
+        if not text:
+            continue
+        if texts:
+            offset += 2
+        start = offset
+        offset += len(text)
+        texts.append(text)
+        spans.append((page.page_number, start, offset))
+    return "\n\n".join(texts), spans
+
+
 async def create_chunks(
     db: AsyncSession,
     document_id: uuid.UUID,
     pages: list[DocumentPage],
-    chunk_size: int = 800,
-    overlap: int = 120,
+    chunk_size: int | None = None,
+    overlap: int | None = None,
 ) -> None:
-    """Create document chunks from pages."""
-    page_spans: list[tuple[int, int, int]] = []
-    offset = 0
-    for page in pages:
-        page_text = page.text or ""
-        page_spans.append((page.page_number, offset, offset + len(page_text)))
-        offset += len(page_text) + 2
+    """Create page-aware chunks, merging only tiny pages with a neighbor."""
+    chunk_chars, _overlap_chars = _chunk_limits(chunk_size, overlap)
+    blocks = _group_pages_for_chunks(pages, chunk_chars)
 
-    all_text = "\n\n".join(p.text or "" for p in pages)
-
-    for chunk_content, start, end in _iter_chunks_with_spans(
-        all_text, chunk_size, overlap
-    ):
-        if not chunk_content.strip():
+    for block in blocks:
+        block_text, page_spans = _block_text_and_spans(block)
+        if not block_text:
             continue
-        page_start, page_end = _page_range_for_span(page_spans, start, end)
+        for chunk_content, start, end in _iter_chunks_with_spans(
+            block_text, chunk_size, overlap
+        ):
+            if not chunk_content.strip():
+                continue
+            page_start, page_end = _page_range_for_span(page_spans, start, end)
 
-        chunk = DocumentChunk(
-            document_id=document_id,
-            page_start=page_start,
-            page_end=page_end,
-            content=chunk_content,
-            token_count=len(chunk_content) // 4,
-        )
-        db.add(chunk)
+            chunk = DocumentChunk(
+                document_id=document_id,
+                page_start=page_start,
+                page_end=page_end,
+                content=chunk_content,
+                token_count=len(chunk_content) // CHARS_PER_TOKEN,
+            )
+            db.add(chunk)
 
     await db.commit()
 

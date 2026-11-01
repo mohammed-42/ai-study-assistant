@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,10 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
 
+    # Chunking
+    CHUNK_TARGET_TOKENS: int = 350
+    CHUNK_OVERLAP_TOKENS: int = 60
+
     # Per-user rate limits (requests per minute; 0 disables)
     RATE_LIMIT_UPLOADS_PER_MINUTE: int = 10
     RATE_LIMIT_AI_PER_MINUTE: int = 20
@@ -50,6 +55,17 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def validate_chunk_settings(self):
+        if self.CHUNK_TARGET_TOKENS <= 0:
+            raise ValueError("CHUNK_TARGET_TOKENS must be greater than 0")
+        if not 0 <= self.CHUNK_OVERLAP_TOKENS < self.CHUNK_TARGET_TOKENS:
+            raise ValueError(
+                "CHUNK_OVERLAP_TOKENS must be at least 0 and less than "
+                "CHUNK_TARGET_TOKENS"
+            )
+        return self
 
     class Config:
         env_file = ".env"

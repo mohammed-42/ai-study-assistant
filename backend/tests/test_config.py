@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.config import Settings, validate_runtime_config
 
@@ -40,3 +41,14 @@ def test_complete_config_has_no_missing_values():
         )
     )
     assert missing == []
+
+
+def test_chunk_settings_defaults():
+    cfg = _settings()
+    assert cfg.CHUNK_TARGET_TOKENS == 350
+    assert cfg.CHUNK_OVERLAP_TOKENS == 60
+
+
+def test_chunk_overlap_must_be_less_than_target():
+    with pytest.raises(ValidationError, match="CHUNK_OVERLAP_TOKENS"):
+        _settings(CHUNK_TARGET_TOKENS=100, CHUNK_OVERLAP_TOKENS=100)

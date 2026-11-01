@@ -4,10 +4,10 @@
 
 - **Phase:** 7 — Hardening. Code complete; targeted live tutor/dashboard verification complete.
 - **Live verification:** tutor citations, notes, quizzes, and planner dashboard LIVE-VERIFIED; full `smoke_features.py` rerun not repeated.
-- **Backend tests:** 190/190 passing (mocked/hermetic).
+- **Backend tests:** 195/195 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** `test: live tutor citation and dashboard checks`.
-- **Session:** 2026-11-01 `backend/scripts/smoke_tutor.py` passed checks (a)–(f) with cleanup.
+- **Latest commit:** `feat: smaller page-aware chunks for precise citations`.
+- **Session:** 2026-11-01 page-aware chunking added; existing documents keep old chunks until retried.
 - **Last updated:** 2026-11-01
 
 ---
@@ -32,7 +32,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` -> 184 passed in 53.17s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` -> 195 passed in 54.55s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
@@ -47,7 +47,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | OCR per-document and daily limits | UNIT-TESTED (mocked) | `test_over_per_document_ocr_cap_fails_without_calling_ocr`, `test_scanned_pdf_over_daily_limit_fails_without_calling_ocr`, `test_ocr_exactly_at_per_document_cap_passes` |
 | Re-run OCR for one page | LIVE-VERIFIED | Live handwriting smoke: upload status=uploaded/ready in 31.8s; rerun-ocr HTTP 200; new text length=207; old_chunks_remaining=0; new_chunk_count=1 min_l2=0.590280; cleanup documents/chunks/pages/jobs=0 and profiles/subjects/chat_sessions/study_plans equal (3/2/2/1). Mocked tests: `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_quota_returns_503_and_keeps_old_data`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached`, `test_rerun_ocr_succeeds_for_scanned_pdf_page` |
 | Cross-user isolation | UNIT-TESTED (mocked) | `tests/test_isolation.py` (19 tests): users A/B across documents, pages, chunks, page image URL, rerun-ocr, chat sessions/messages, notes, quizzes/attempts, study plans/tasks; unauthenticated and garbage-token requests return 401. Fixed planner dashboard leak of other users' today tasks. |
-| Chunk page mapping | UNIT-TESTED (mocked) | `tests/test_chunk_pages.py` (3 tests): three-page text verifies chunks inside one page, across two pages, and across three pages; chunk size/overlap behavior unchanged. |
+| Chunk page mapping | UNIT-TESTED (mocked) | Page-aware chunking with `CHUNK_TARGET_TOKENS=350` and `CHUNK_OVERLAP_TOKENS=60` (validated overlap < target; documented in `.env.example`/README). Normal pages split within the page at paragraph/sentence boundaries; only pages under 30% of target merge with a neighbor, with accurate `page_start`/`page_end`. Tests: 8 pages × ~200 tokens -> 8/8 page-local chunks; tiny page merge spans (1,2); size/overlap limits and boundary endings checked; existing page-range tests updated. `pytest -q` -> 195 passed in 54.55s. Existing documents keep old chunks until retried. |
 | Retry after embedding failure | UNIT-TESTED (mocked) | Retry reaches ready without duplicate chunks |
 | Processing job state | IMPLEMENTED | Jobs set completed/failed; smoke cleanup shows 0 job rows |
 | PDF text extraction (PyMuPDF) | LIVE-VERIFIED | fitz 1.28.2 opened `samples/sample.pdf`: 3 pages, chars `[1935, 2198, 1205]` |
