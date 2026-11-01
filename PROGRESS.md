@@ -4,9 +4,9 @@
 
 - **Phase:** 7 — Hardening. Code complete; live verification partial (Gemini daily quota blocks final planner rerun).
 - **Live verification:** tutor, notes, quizzes LIVE-VERIFIED; planner PARTIAL; full smoke stopped on Gemini 429 daily quota.
-- **Backend tests:** 170/170 passing (mocked/hermetic).
+- **Backend tests:** 171/171 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** pending `feat: reliable chunk pages and resolved tutor citations`.
+- **Latest commit:** pending `feat(frontend): document retry, delete, filter and pagination`.
 - **Session:** Paused on 2026-10-26 after Gemini free-tier quota exhaustion; resume by rerunning `backend/scripts/smoke_features.py` after quota reset.
 - **Last updated:** 2026-11-01
 
@@ -32,7 +32,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 170 passed in 53.45s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 171 passed in 54.10s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
@@ -62,6 +62,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Upload dialog | NOT VERIFIED | New dialog supports one PDF or 2-20 images, reorder/remove, client validation, status polling, and privacy/OCR notices; `tsc`/build exit 0; browser UI not exercised |
 | Quiz + notes generate dialog | UNIT-TESTED (mocked) | Subject select is required; optional document select lists only that subject's READY documents; unset `subject_id`/`document_id` are omitted (never empty strings); backend 422 message asserted for both routes; valid `subject_id` passes with Gemini mocked; `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
+| Document retry/delete/filter/pagination | UNIT-TESTED (mocked) | Backend list accepts `subject_id`/`limit`/`offset`; defaults preserve unpaginated behavior (`test_list_documents_paginated`). Documents page adds subject filter, 10-row pagination, failed-only retry with error text and polling, delete confirmation; detail header adds failed-only retry and delete with polling. `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Migrations on a blank DB | NOT VERIFIED | — |
 | Tutor against real Gemini | LIVE-VERIFIED | `smoke_features.py`: "What is a component?" -> answer_length=187, citations=1 (`sample.pdf p1`); off-topic question -> `is_insufficient=True`, citations=0; follow-up -> answer_length=385, citations=1. |
 | Resolved tutor citations | UNIT-TESTED (mocked) | `tests/test_citations.py`: database resolves document name, page range, OCR/needs_review/user_edited flags; invalid/foreign chunk IDs dropped; API and history return citation objects, not chunk IDs. Browser UI NOT VERIFIED. |

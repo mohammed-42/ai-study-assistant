@@ -25,13 +25,17 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 @router.get("/", response_model=list[DocumentOut])
 async def list_documents(
     subject_id: UUID | None = Query(None),
+    limit: int | None = Query(None, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     user: Profile = Depends(get_current_user),
 ):
     stmt = select(Document).where(Document.owner_id == user.id)
     if subject_id:
         stmt = stmt.where(Document.subject_id == subject_id)
-    stmt = stmt.order_by(desc(Document.created_at))
+    stmt = stmt.order_by(desc(Document.created_at)).offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

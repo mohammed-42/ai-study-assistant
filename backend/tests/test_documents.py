@@ -2,6 +2,7 @@
 
 import io
 import uuid
+from datetime import datetime, timezone
 from uuid import UUID
 import pytest
 from sqlalchemy import select
@@ -91,6 +92,31 @@ async def test_list_documents_by_subject(db_session, test_user, test_subject, cl
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_documents_paginated(db_session, test_user, test_subject, client):
+    """Test limit/offset pagination while preserving the unpaginated default."""
+    for index in range(3):
+        db_session.add(
+            Document(
+                owner_id=test_user.id,
+                subject_id=test_subject.id,
+                name=f"Doc {index}.pdf",
+                doc_type="pdf",
+                status=DocumentStatus.UPLOADED,
+                created_at=datetime(2024, 1, index + 1, tzinfo=timezone.utc),
+            )
+        )
+    await db_session.commit()
+
+    response = client.get("/api/documents/", params={"limit": 2, "offset": 1})
+    assert response.status_code == 200
+    assert [doc["name"] for doc in response.json()] == ["Doc 1.pdf", "Doc 0.pdf"]
+
+    response = client.get("/api/documents/")
+    assert response.status_code == 200
+    assert len(response.json()) == 3
 
 
 @pytest.mark.asyncio

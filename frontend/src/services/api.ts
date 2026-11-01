@@ -28,9 +28,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
 // Document APIs
 export const documentApi = {
-  list: (subjectId?: string) => {
-    const params = subjectId ? `?subject_id=${subjectId}` : ''
-    return apiFetch<AppDocument[]>(`/documents/${params}`)
+  list: (subjectId?: string, pagination?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams()
+    if (subjectId) params.set('subject_id', subjectId)
+    if (pagination?.limit !== undefined) params.set('limit', String(pagination.limit))
+    if (pagination?.offset !== undefined) params.set('offset', String(pagination.offset))
+    const query = params.toString()
+    return apiFetch<AppDocument[]>(`/documents/${query ? `?${query}` : ''}`)
   },
   get: (id: string) => apiFetch<AppDocument>(`/documents/${id}`),
   delete: (id: string) => apiFetch<void>(`/documents/${id}`, { method: 'DELETE' }),

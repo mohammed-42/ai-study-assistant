@@ -5,9 +5,19 @@ import { DocumentPage, DocumentChunk } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, FileText, Upload, Pencil, Check, X, RefreshCw } from 'lucide-react'
+import { AlertCircle, FileText, Upload, Pencil, Check, X, RefreshCw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { useRerunPageOcr } from '@/hooks/use-documents'
+import { useDeleteDocument, useRerunPageOcr, useRetryDocument } from '@/hooks/use-documents'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export default function DocumentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -15,11 +25,16 @@ export default function DocumentDetail() {
   const queryClient = useQueryClient()
   const [editingPageId, setEditingPageId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: document, isLoading } = useQuery({
     queryKey: ['documents', id],
     queryFn: () => documentApi.get(id!),
     enabled: !!id,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'uploaded' || status === 'processing' ? 3000 : false
+    },
   })
 
   const { data: pages } = useQuery({
@@ -46,6 +61,8 @@ export default function DocumentDetail() {
   })
 
   const rerunOcrMutation = useRerunPageOcr(id)
+  const deleteMutation = useDeleteDocument()
+  const retryMutation = useRetryDocument()
 
   const rerunOcr = (page: DocumentPage) => {
     const confirmed = window.confirm(
@@ -108,9 +125,34 @@ export default function DocumentDetail() {
             Page {document.page_count} • Uploaded {new Date(document.created_at).toLocaleDateString()}
           </p>
         </div>
-        <Badge className={`shrink-0 ${statusColors[document.status]}`}>
-          {document.status.toUpperCase()}
-        </Badge>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Badge className={statusColors[document.status]}>
+            {document.status.toUpperCase()}
+          </Badge>
+          {document.status === 'failed' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => retryMutation.mutate(document.id)}
+              disabled={retryMutation.isPending}
+              aria-label={`Retry processing ${document.name}`}
+            >
+              <RefreshCw
+                className={`mr-1 h-4 w-4 ${retryMutation.isPending ? 'animate-spin' : ''}`}
+              />
+              Retry
+            </Button>
+          )}
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+            aria-label={`Delete ${document.name}`}
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       {document.error_message && (
@@ -253,6 +295,34 @@ export default function DocumentDetail() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes "{document.name}", including its pages and chunks.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() =>
+                deleteMutation.mutate(document.id, {
+                  onSuccess: () => {
+                    setDeleteOpen(false)
+                    navigate('/documents')
+                  },
+                })
+              }
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

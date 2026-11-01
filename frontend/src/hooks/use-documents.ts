@@ -4,10 +4,13 @@ import { useToast } from '@/hooks/use-toast'
 
 const QUERY_KEY = ['documents']
 
-export function useDocuments(subjectId?: string) {
+export function useDocuments(
+  subjectId?: string,
+  pagination?: { limit?: number; offset?: number }
+) {
   return useQuery({
-    queryKey: [...QUERY_KEY, subjectId],
-    queryFn: () => documentApi.list(subjectId),
+    queryKey: [...QUERY_KEY, subjectId ?? null, pagination?.limit ?? null, pagination?.offset ?? null],
+    queryFn: () => documentApi.list(subjectId, pagination),
     refetchInterval: (query) => {
       const documents = query.state.data
       return documents?.some(
