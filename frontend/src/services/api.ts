@@ -60,6 +60,10 @@ export const documentApi = {
     return response.json() as Promise<AppDocument>
   },
   getPages: (id: string) => apiFetch<DocumentPage[]>(`/documents/${id}/pages`),
+  getPageImageUrl: (docId: string, pageId: string) =>
+    apiFetch<{ url: string; expires_in: number }>(
+      `/documents/${docId}/pages/${pageId}/image-url`
+    ),
   getChunks: (id: string) => apiFetch<DocumentChunk[]>(`/documents/${id}/chunks`),
   editPage: (docId: string, pageId: string, data: {
     text: string

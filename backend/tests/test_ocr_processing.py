@@ -8,10 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import fitz
 import pytest
+from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import select
 
 from app.ai.ocr import OcrQuality, OcrResult
+from app.api.deps import get_current_user
+from app.core.rate_limit import rate_limiter
+from app.main import app
 from app.models.document import Document, DocumentStatus
 from app.models.document_page import DocumentPage
 from app.services.processing import OCR_RENDER_DPI, process_document
@@ -56,6 +60,42 @@ def _mock_provider(captured_images: list[bytes]) -> MagicMock:
     provider.transcribe_page = AsyncMock(side_effect=transcribe)
     provider.embed_texts = AsyncMock(side_effect=embed)
     return provider
+
+
+@pytest.fixture
+def client(db_session, test_user):
+    mock_user = MagicMock()
+    mock_user.id = test_user.id
+    mock_user.email = test_user.email
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    rate_limiter.reset()
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+        rate_limiter.reset()
+
+
+def _mock_pdf_storage(monkeypatch, pdf_bytes: bytes) -> tuple[MagicMock, dict]:
+    storage = MagicMock()
+    bucket = storage.storage.from_.return_value
+    uploaded: dict[str, tuple[bytes, dict | None]] = {}
+
+    def download(key: str) -> bytes:
+        if key in uploaded:
+            return uploaded[key][0]
+        if key.endswith(".pdf"):
+            return pdf_bytes
+        return b""
+
+    def upload(key: str, data: bytes, file_options: dict | None = None) -> None:
+        uploaded[key] = (data, file_options)
+
+    bucket.download.side_effect = download
+    bucket.upload.side_effect = upload
+    monkeypatch.setattr("app.services.processing._get_storage_client", lambda: storage)
+    return storage, uploaded
 
 
 async def _create_pdf_document(db_session, test_user, test_subject, pdf_bytes: bytes) -> Document:
@@ -138,6 +178,81 @@ async def test_mixed_pdf_uses_text_layer_then_ocr(
     assert [p.source for p in pages] == ["text_layer", "ocr"]
     assert len(captured) == 1
     assert pages[1].text.startswith("Scanned page text")
+
+
+@pytest.mark.asyncio
+async def test_scanned_pdf_saves_page_image_and_text_page_has_none(
+    db_session, test_user, test_subject, monkeypatch
+):
+    pdf_bytes, _ = _build_pdf(["text", "image"])
+    doc = await _create_pdf_document(db_session, test_user, test_subject, pdf_bytes)
+
+    _storage, uploaded = _mock_pdf_storage(monkeypatch, pdf_bytes)
+    captured: list[bytes] = []
+    monkeypatch.setattr(
+        "app.services.processing._get_ocr_provider",
+        lambda: _mock_provider(captured),
+    )
+
+    await process_document(db_session, str(doc.id))
+
+    pages = (
+        await db_session.execute(
+            select(DocumentPage)
+            .where(DocumentPage.document_id == doc.id)
+            .order_by(DocumentPage.page_number)
+        )
+    ).scalars().all()
+
+    expected_key = f"user/{test_user.id}/{doc.id}/page_2.jpg"
+    assert pages[0].page_image_key is None
+    assert pages[1].page_image_key == expected_key
+    assert expected_key in uploaded
+    image_bytes, options = uploaded[expected_key]
+    assert image_bytes.startswith(b"\xff\xd8")
+    assert Image.open(io.BytesIO(image_bytes)).format == "JPEG"
+    assert options == {"content-type": "image/jpeg", "upsert": "true"}
+
+
+@pytest.mark.asyncio
+async def test_rerun_ocr_succeeds_for_scanned_pdf_page(
+    db_session, test_user, test_subject, client, monkeypatch
+):
+    pdf_bytes, _ = _build_pdf(["image"])
+    doc = await _create_pdf_document(db_session, test_user, test_subject, pdf_bytes)
+
+    _storage, uploaded = _mock_pdf_storage(monkeypatch, pdf_bytes)
+    captured: list[bytes] = []
+    monkeypatch.setattr(
+        "app.services.processing._get_ocr_provider",
+        lambda: _mock_provider(captured),
+    )
+
+    await process_document(db_session, str(doc.id))
+
+    page = (
+        await db_session.execute(
+            select(DocumentPage).where(DocumentPage.document_id == doc.id)
+        )
+    ).scalar_one()
+    assert page.page_image_key in uploaded
+
+    new_text = "Re-read scanned page text from the saved image. " * 10
+    rerun_provider = MagicMock()
+    rerun_provider.transcribe_page = AsyncMock(
+        return_value=OcrResult(text=new_text, quality=OcrQuality.HIGH)
+    )
+    rerun_provider.embed_texts = AsyncMock(return_value=[[0.2] * 768])
+    monkeypatch.setattr(
+        "app.services.processing._get_ocr_provider",
+        lambda: rerun_provider,
+    )
+
+    response = client.post(f"/api/documents/{doc.id}/pages/{page.id}/rerun-ocr")
+
+    assert response.status_code == 200
+    assert response.json()["text"] == new_text
+    assert response.json()["page_image_key"] == page.page_image_key
 
 
 @pytest.mark.asyncio

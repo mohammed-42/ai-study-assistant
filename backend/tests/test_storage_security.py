@@ -129,3 +129,46 @@ async def test_delete_document_removes_storage_objects(
         "document_id": doc.id,
         "storage_key": doc.storage_key,
     }
+
+
+@pytest.mark.asyncio
+async def test_delete_document_removes_rendered_page_images(
+    db_session, test_user, test_subject, client, monkeypatch
+):
+    doc_id = uuid.uuid4()
+    folder = f"user/{test_user.id}/{doc_id}"
+    doc = Document(
+        id=doc_id,
+        owner_id=test_user.id,
+        subject_id=test_subject.id,
+        name="Scanned.pdf",
+        doc_type="pdf",
+        status=DocumentStatus.READY,
+        storage_key=f"{folder}/scanned.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+
+    page = DocumentPage(
+        document_id=doc.id,
+        page_number=1,
+        text="OCR text",
+        source="ocr",
+        page_image_key=f"{folder}/page_1.jpg",
+    )
+    db_session.add(page)
+    await db_session.commit()
+
+    storage = MagicMock()
+    bucket = storage.storage.from_.return_value
+    bucket.list.return_value = [{"name": "scanned.pdf"}, {"name": "page_1.jpg"}]
+
+    monkeypatch.setattr("app.services.storage.storage_is_configured", lambda: True)
+    monkeypatch.setattr("app.services.storage.get_storage_client", lambda: storage)
+
+    response = client.delete(f"/api/documents/{doc.id}")
+
+    assert response.status_code == 204
+    bucket.remove.assert_called_once_with(
+        [f"{folder}/scanned.pdf", f"{folder}/page_1.jpg"]
+    )

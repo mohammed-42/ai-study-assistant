@@ -120,6 +120,47 @@ async def test_list_documents_paginated(db_session, test_user, test_subject, cli
 
 
 @pytest.mark.asyncio
+async def test_list_documents_filtered_pagination(db_session, test_user, test_subject, client):
+    """Subject filtering happens before limit/offset so pages stay correct."""
+    other_subject = Subject(owner_id=test_user.id, name="Physics")
+    db_session.add(other_subject)
+    await db_session.commit()
+    await db_session.refresh(other_subject)
+
+    for index in range(3):
+        db_session.add(
+            Document(
+                owner_id=test_user.id,
+                subject_id=test_subject.id,
+                name=f"Math {index}.pdf",
+                doc_type="pdf",
+                status=DocumentStatus.UPLOADED,
+                created_at=datetime(2024, 2, index + 1, tzinfo=timezone.utc),
+            )
+        )
+    for index in range(2):
+        db_session.add(
+            Document(
+                owner_id=test_user.id,
+                subject_id=other_subject.id,
+                name=f"Physics {index}.pdf",
+                doc_type="pdf",
+                status=DocumentStatus.UPLOADED,
+                created_at=datetime(2024, 3, index + 1, tzinfo=timezone.utc),
+            )
+        )
+    await db_session.commit()
+
+    response = client.get(
+        "/api/documents/",
+        params={"subject_id": str(test_subject.id), "limit": 2, "offset": 1},
+    )
+
+    assert response.status_code == 200
+    assert [doc["name"] for doc in response.json()] == ["Math 1.pdf", "Math 0.pdf"]
+
+
+@pytest.mark.asyncio
 async def test_delete_document(db_session, test_user, test_subject, client):
     """Test deleting a document."""
     create_resp = client.post(

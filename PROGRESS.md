@@ -4,9 +4,9 @@
 
 - **Phase:** 7 — Hardening. Code complete; live verification partial (Gemini daily quota blocks final planner rerun).
 - **Live verification:** tutor, notes, quizzes LIVE-VERIFIED; planner PARTIAL; full smoke stopped on Gemini 429 daily quota.
-- **Backend tests:** 171/171 passing (mocked/hermetic).
+- **Backend tests:** 175/175 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** pending `feat(frontend): document retry, delete, filter and pagination`.
+- **Latest commit:** pending `feat: page images for scanned PDFs, side-by-side OCR review`.
 - **Session:** Paused on 2026-10-26 after Gemini free-tier quota exhaustion; resume by rerunning `backend/scripts/smoke_features.py` after quota reset.
 - **Last updated:** 2026-11-01
 
@@ -32,20 +32,20 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 171 passed in 54.10s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 175 passed in 54.93s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
 | Rate limits (upload, AI, re-embed) | UNIT-TESTED (mocked) | `tests/test_rate_limit.py`; process-local |
 | Signed page-image URLs | UNIT-TESTED (mocked) | `tests/test_storage_security.py` |
-| Storage upload/delete wiring | UNIT-TESTED (mocked) | storage tests; live storage path exercised by PDF/handwriting smoke |
+| Storage upload/delete wiring | UNIT-TESTED (mocked) | storage tests; rendered page images are included by folder cleanup (`test_delete_document_removes_rendered_page_images`); live storage path exercised by PDF/handwriting smoke |
 | Document readiness gating | UNIT-TESTED (mocked) | Ready only with ≥1 page, non-empty text, ≥1 chunk, all embeddings non-zero |
 | Embedding failure handling | UNIT-TESTED (mocked) | `embed_texts` raises; failed docs persist no chunks/zero vectors |
 | No-readable-text handling | UNIT-TESTED (mocked) | 0 pages, all-empty pages, and `[NO_TEXT]` → failed |
-| Scanned-PDF rendering at 200 DPI | UNIT-TESTED (mocked) | `test_scanned_pdf_renders_at_200_dpi`, `test_mixed_pdf_uses_text_layer_then_ocr` |
+| Scanned-PDF rendering at 200 DPI | UNIT-TESTED (mocked) | `test_scanned_pdf_renders_at_200_dpi`, `test_mixed_pdf_uses_text_layer_then_ocr`, `test_scanned_pdf_saves_page_image_and_text_page_has_none` (JPEG quality 85, document-folder key, text page None) |
 | OCR/embedding provider error mapping | UNIT-TESTED (mocked) | `test_quota_error_fails_clearly_and_retry_succeeds`, `test_timeout_maps_to_busy_message`, `test_empty_ocr_text_is_no_readable_text`, `test_failed_ocr_pages_do_not_count_toward_daily_limit` |
 | OCR per-document and daily limits | UNIT-TESTED (mocked) | `test_over_per_document_ocr_cap_fails_without_calling_ocr`, `test_scanned_pdf_over_daily_limit_fails_without_calling_ocr`, `test_ocr_exactly_at_per_document_cap_passes` |
-| Re-run OCR for one page | LIVE-VERIFIED | Live handwriting smoke: upload status=uploaded/ready in 31.8s; rerun-ocr HTTP 200; new text length=207; old_chunks_remaining=0; new_chunk_count=1 min_l2=0.590280; cleanup documents/chunks/pages/jobs=0 and profiles/subjects/chat_sessions/study_plans equal (3/2/2/1). Mocked tests: `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_quota_returns_503_and_keeps_old_data`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached` |
+| Re-run OCR for one page | LIVE-VERIFIED | Live handwriting smoke: upload status=uploaded/ready in 31.8s; rerun-ocr HTTP 200; new text length=207; old_chunks_remaining=0; new_chunk_count=1 min_l2=0.590280; cleanup documents/chunks/pages/jobs=0 and profiles/subjects/chat_sessions/study_plans equal (3/2/2/1). Mocked tests: `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_quota_returns_503_and_keeps_old_data`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached`, `test_rerun_ocr_succeeds_for_scanned_pdf_page` |
 | Cross-user isolation | UNIT-TESTED (mocked) | `tests/test_isolation.py` (19 tests): users A/B across documents, pages, chunks, page image URL, rerun-ocr, chat sessions/messages, notes, quizzes/attempts, study plans/tasks; unauthenticated and garbage-token requests return 401. Fixed planner dashboard leak of other users' today tasks. |
 | Chunk page mapping | UNIT-TESTED (mocked) | `tests/test_chunk_pages.py` (3 tests): three-page text verifies chunks inside one page, across two pages, and across three pages; chunk size/overlap behavior unchanged. |
 | Retry after embedding failure | UNIT-TESTED (mocked) | Retry reaches ready without duplicate chunks |
@@ -62,7 +62,8 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Upload dialog | NOT VERIFIED | New dialog supports one PDF or 2-20 images, reorder/remove, client validation, status polling, and privacy/OCR notices; `tsc`/build exit 0; browser UI not exercised |
 | Quiz + notes generate dialog | UNIT-TESTED (mocked) | Subject select is required; optional document select lists only that subject's READY documents; unset `subject_id`/`document_id` are omitted (never empty strings); backend 422 message asserted for both routes; valid `subject_id` passes with Gemini mocked; `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
-| Document retry/delete/filter/pagination | UNIT-TESTED (mocked) | Backend list accepts `subject_id`/`limit`/`offset`; defaults preserve unpaginated behavior (`test_list_documents_paginated`). Documents page adds subject filter, 10-row pagination, failed-only retry with error text and polling, delete confirmation; detail header adds failed-only retry and delete with polling. `tsc`/build exit 0; browser UI NOT VERIFIED |
+| Document retry/delete/filter/pagination | UNIT-TESTED (mocked) | Backend list accepts `subject_id`/`limit`/`offset`; defaults preserve unpaginated behavior (`test_list_documents_paginated`, `test_list_documents_filtered_pagination`). Subject filtering is server-side before pagination. Documents page adds 10-row pagination, failed-only retry with error text and polling, delete confirmation; detail header adds failed-only retry and delete with polling. `tsc`/build exit 0; browser UI NOT VERIFIED |
+| Scanned PDF page images + side-by-side review | UNIT-TESTED (mocked) | OCR-rendered PDF pages are saved as JPEG quality 85 under `user/<owner>/<document>/page_<n>.jpg`; text-layer pages have no image; rerun OCR succeeds from the saved image; document delete removes page images. DocumentDetail shows the signed image left and text/controls right, with skeleton, retry, full-size link, and vertical stacking below `md`. `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Migrations on a blank DB | NOT VERIFIED | — |
 | Tutor against real Gemini | LIVE-VERIFIED | `smoke_features.py`: "What is a component?" -> answer_length=187, citations=1 (`sample.pdf p1`); off-topic question -> `is_insufficient=True`, citations=0; follow-up -> answer_length=385, citations=1. |
 | Resolved tutor citations | UNIT-TESTED (mocked) | `tests/test_citations.py`: database resolves document name, page range, OCR/needs_review/user_edited flags; invalid/foreign chunk IDs dropped; API and history return citation objects, not chunk IDs. Browser UI NOT VERIFIED. |

@@ -240,6 +240,37 @@ async def _start_processing_job(db: AsyncSession, doc_id: uuid.UUID):
     return job
 
 
+def _document_storage_folder(doc: Document) -> str:
+    """Return the private storage folder that belongs to this document."""
+    expected = f"user/{doc.owner_id}/{doc.id}"
+    if doc.storage_key and "/" in doc.storage_key:
+        candidate = doc.storage_key.rsplit("/", 1)[0]
+        if candidate.startswith(expected):
+            return candidate
+    return expected
+
+
+def _store_page_image(doc: Document, page_number: int, image_bytes: bytes) -> str | None:
+    """Upload a rendered OCR page image as JPEG under the document folder."""
+    key = f"{_document_storage_folder(doc)}/page_{page_number}.jpg"
+    try:
+        storage = _get_storage_client()
+        storage.storage.from_(settings.STORAGE_BUCKET).upload(
+            key,
+            image_bytes,
+            file_options={"content-type": "image/jpeg", "upsert": "true"},
+        )
+        return key
+    except Exception as exc:
+        logger.warning(
+            "Page image upload failed for doc %s page %d: %s",
+            doc.id,
+            page_number,
+            exc,
+        )
+        return None
+
+
 async def _process_pdf(db: AsyncSession, doc: Document) -> None:
     """Extract text from PDF using PyMuPDF text layer; falls back to OCR for blank pages."""
     fitz = _get_fitz()
@@ -284,18 +315,21 @@ async def _process_pdf(db: AsyncSession, doc: Document) -> None:
         for page_num, page, text in page_specs:
             source = "text_layer"
             needs_review = False
+            page_image_key = None
 
             # If text layer is empty, render page as image and OCR it
             if not text:
                 try:
                     mat = fitz.Matrix(OCR_RENDER_DPI / 72, OCR_RENDER_DPI / 72)
                     pix = page.get_pixmap(matrix=mat)
-                    img_bytes = pix.tobytes("png")
+                    img_bytes = pix.tobytes("jpeg", jpg_quality=85)
                     if ocr_provider:
-                        ocr_result = await ocr_provider.transcribe_page(img_bytes, "image/png")
+                        ocr_result = await ocr_provider.transcribe_page(img_bytes, "image/jpeg")
                         text = ocr_result.text
                         source = "ocr"
                         needs_review = flag_needs_review(ocr_result)
+                        if text.strip():
+                            page_image_key = _store_page_image(doc, page_num + 1, img_bytes)
                     else:
                         text = ""
                         needs_review = True
@@ -312,6 +346,7 @@ async def _process_pdf(db: AsyncSession, doc: Document) -> None:
                 text=text,
                 source=source,
                 needs_review=needs_review,
+                page_image_key=page_image_key,
             )
             db.add(doc_page)
 

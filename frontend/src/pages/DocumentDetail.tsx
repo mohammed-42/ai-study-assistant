@@ -5,7 +5,7 @@ import { DocumentPage, DocumentChunk } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, FileText, Upload, Pencil, Check, X, RefreshCw, Trash2 } from 'lucide-react'
+import { AlertCircle, FileText, Upload, Pencil, Check, X, RefreshCw, Trash2, Maximize2 } from 'lucide-react'
 import { useState } from 'react'
 import { useDeleteDocument, useRerunPageOcr, useRetryDocument } from '@/hooks/use-documents'
 import {
@@ -18,6 +18,57 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+
+function PageImage({ documentId, page }: { documentId: string; page: DocumentPage }) {
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
+    queryKey: ['documents', documentId, 'pages', page.id, 'image-url'],
+    queryFn: () => documentApi.getPageImageUrl(documentId, page.id),
+    enabled: !!page.page_image_key,
+  })
+
+  if (isLoading || (isFetching && !data)) {
+    return <Skeleton className="aspect-[3/4] w-full" />
+  }
+
+  if (isError || !data?.url) {
+    return (
+      <div
+        role="alert"
+        className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-md border bg-muted/30 p-4 text-center"
+      >
+        <AlertCircle className="h-8 w-8 text-destructive" />
+        <p className="text-sm font-medium">Could not load page image.</p>
+        <p className="text-xs text-muted-foreground">
+          {error instanceof Error ? error.message : 'Please try again.'}
+        </p>
+        <Button variant="link" size="sm" onClick={() => refetch()}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <a
+      href={data.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Open page ${page.page_number} image full size`}
+      className="group relative block overflow-hidden rounded-md border bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <img
+        src={data.url}
+        alt={`Scanned page ${page.page_number}`}
+        className="h-auto w-full object-contain"
+        loading="lazy"
+      />
+      <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-background/90 px-2 py-1 text-xs shadow-sm">
+        <Maximize2 className="h-3 w-3" />
+        Full size
+      </span>
+    </a>
+  )
+}
 
 export default function DocumentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -169,89 +220,112 @@ export default function DocumentDetail() {
           </h2>
           {pages && pages.length > 0 ? (
             <div className="mt-2 space-y-3">
-              {pages.map((page: DocumentPage) => (
-                <div key={page.id} className="rounded-md border bg-card p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Page {page.page_number}</span>
-                    <div className="flex gap-2">
-                      {page.needs_review && (
-                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                          Needs Review
-                        </Badge>
-                      )}
-                      {page.source === 'ocr' && (
-                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                          OCR
-                        </Badge>
-                      )}
-                      {page.user_edited && (
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                          Edited
-                        </Badge>
-                      )}
-                      {page.page_image_key && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => rerunOcr(page)}
-                          disabled={
-                            rerunOcrMutation.isPending &&
-                            rerunOcrMutation.variables?.pageId === page.id
-                          }
-                          aria-label={`Re-read page ${page.page_number} with OCR`}
-                        >
-                          <RefreshCw
-                            className={`h-3 w-3 ${
-                              rerunOcrMutation.isPending &&
-                              rerunOcrMutation.variables?.pageId === page.id
-                                ? 'animate-spin'
-                                : ''
-                            }`}
-                          />
-                        </Button>
-                      )}
+              {pages.map((page: DocumentPage) => {
+                const isRerunning =
+                  rerunOcrMutation.isPending &&
+                  rerunOcrMutation.variables?.pageId === page.id
+
+                const controls = (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {page.needs_review && (
+                      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                        Needs Review
+                      </Badge>
+                    )}
+                    {page.source === 'ocr' && (
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        OCR
+                      </Badge>
+                    )}
+                    {page.user_edited && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        Edited
+                      </Badge>
+                    )}
+                    {page.page_image_key && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => startEdit(page)}
-                        aria-label={`Edit text for page ${page.page_number}`}
+                        onClick={() => rerunOcr(page)}
+                        disabled={isRerunning}
+                        aria-label={`Re-read page ${page.page_number} with OCR`}
                       >
-                        <Pencil className="h-3 w-3" />
+                        <RefreshCw
+                          className={`h-3 w-3 ${isRerunning ? 'animate-spin' : ''}`}
+                        />
                       </Button>
-                    </div>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => startEdit(page)}
+                      aria-label={`Edit text for page ${page.page_number}`}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
                   </div>
-                  {rerunOcrMutation.isError &&
-                    rerunOcrMutation.variables?.pageId === page.id && (
-                      <p className="mt-1 text-sm text-destructive">
-                        {rerunOcrMutation.error.message}
+                )
+
+                const textContent = (
+                  <>
+                    {rerunOcrMutation.isError &&
+                      rerunOcrMutation.variables?.pageId === page.id && (
+                        <p className="text-sm text-destructive">
+                          {rerunOcrMutation.error.message}
+                        </p>
+                      )}
+                    {editingPageId === page.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          className="w-full min-h-[100px] rounded-md border p-2 text-sm"
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          aria-label={`OCR text for page ${page.page_number}`}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveEdit} disabled={editPageMutation.isPending}>
+                            <Check className="h-3 w-3 mr-1" /> Save
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={cancelEdit}>
+                            <X className="h-3 w-3 mr-1" /> Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground line-clamp-3">
+                        {page.text || 'No text extracted'}
                       </p>
                     )}
-                  {editingPageId === page.id ? (
-                    <div className="mt-2 space-y-2">
-                      <textarea
-                        className="w-full min-h-[100px] rounded-md border p-2 text-sm"
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        aria-label={`OCR text for page ${page.page_number}`}
-                      />
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={saveEdit} disabled={editPageMutation.isPending}>
-                          <Check className="h-3 w-3 mr-1" /> Save
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={cancelEdit}>
-                          <X className="h-3 w-3 mr-1" /> Cancel
-                        </Button>
+                  </>
+                )
+
+                return (
+                  <div key={page.id} className="rounded-md border bg-card p-3">
+                    {page.page_image_key ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <PageImage documentId={id!} page={page} />
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-sm font-medium">Page {page.page_number}</span>
+                            {controls}
+                          </div>
+                          {textContent}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
-                      {page.text || 'No text extracted'}
-                    </p>
-                  )}
-                </div>
-              ))}
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm font-medium">Page {page.page_number}</span>
+                          {controls}
+                        </div>
+                        <div className="mt-2">{textContent}</div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <p className="mt-2 text-sm text-muted-foreground">
