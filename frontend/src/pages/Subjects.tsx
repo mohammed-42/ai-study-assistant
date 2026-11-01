@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { Input } from '@/components/ui/input'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
@@ -23,7 +25,7 @@ export default function Subjects() {
   const [newSubject, setNewSubject] = useState({ name: '', description: '' })
   const [open, setOpen] = useState(false)
 
-  const { data: subjects, isLoading } = useQuery({
+  const { data: subjects, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['subjects'],
     queryFn: () => apiFetch<Subject[]>('/subjects/'),
   })
@@ -102,9 +104,17 @@ export default function Subjects() {
         </Dialog>
       </div>
 
-      {isLoading ? (
-        <div className="flex h-32 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      {isError ? (
+        <ErrorState
+          title="Failed to load subjects"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
         </div>
       ) : subjects?.length === 0 ? (
         <Card>

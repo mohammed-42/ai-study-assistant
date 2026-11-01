@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Trash2, MessageSquare } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 
 const QUERY_KEY = ['chat-sessions']
 
@@ -13,7 +14,7 @@ export default function Tutor() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
 
-  const { data: sessions, isLoading } = useQuery({
+  const { data: sessions, isLoading, isError, error, refetch } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: () => chatApi.listSessions(),
   })
@@ -35,6 +36,10 @@ export default function Tutor() {
     mutationFn: (id: string) => chatApi.deleteSession(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+      toast({ title: 'Chat deleted' })
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to delete chat', description: error.message, variant: 'destructive' })
     },
   })
 
@@ -63,7 +68,13 @@ export default function Tutor() {
         </Button>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <ErrorState
+          title="Failed to load chats"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-32 rounded-lg" />

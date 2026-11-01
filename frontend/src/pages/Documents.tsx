@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useDeleteDocument, useDocuments, useRetryDocument } from '@/hooks/use-documents'
 import { useSubjects } from '@/hooks/use-subjects'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,7 +23,6 @@ import {
 import { UploadDialog } from '@/components/upload-dialog'
 import type { AppDocument } from '@/types'
 import {
-  AlertCircle,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -121,16 +121,11 @@ export default function Documents() {
       </div>
 
       {isError ? (
-        <div role="alert" className="flex flex-col items-center justify-center py-12 text-center">
-          <AlertCircle className="h-12 w-12 text-destructive" />
-          <h2 className="mt-4 text-xl font-semibold">Failed to load documents</h2>
-          <p className="mt-2 text-muted-foreground">
-            {error instanceof Error ? error.message : 'Please try again.'}
-          </p>
-          <Button onClick={() => refetch()} className="mt-4">
-            Try again
-          </Button>
-        </div>
+        <ErrorState
+          title="Failed to load documents"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
       ) : isLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-8 w-48" />

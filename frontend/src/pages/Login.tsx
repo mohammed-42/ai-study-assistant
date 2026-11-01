@@ -34,6 +34,12 @@ export default function Login() {
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [notice] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const value = window.sessionStorage.getItem('auth_notice')
+    if (value) window.sessionStorage.removeItem('auth_notice')
+    return value
+  })
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -71,6 +77,14 @@ export default function Login() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {notice && (
+                <div
+                  role="status"
+                  className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+                >
+                  {notice}
+                </div>
+              )}
               {error && (
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}

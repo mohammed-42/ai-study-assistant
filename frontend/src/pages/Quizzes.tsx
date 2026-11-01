@@ -5,6 +5,8 @@ import { useDocuments } from '@/hooks/use-documents'
 import { useSubjects } from '@/hooks/use-subjects'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Sparkles, Trash2, Play } from 'lucide-react'
 import {
@@ -42,7 +44,7 @@ interface QuizzesProps {
 
 export default function Quizzes({ subjectId }: QuizzesProps) {
   const navigate = useNavigate()
-  const { data: quizzes, isLoading } = useQuizzes(subjectId)
+  const { data: quizzes, isLoading, isError, error, refetch } = useQuizzes(subjectId)
   const generateQuiz = useGenerateQuiz()
   const deleteQuiz = useDeleteQuiz()
   const [generateOpen, setGenerateOpen] = useState(false)
@@ -71,14 +73,22 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
     const params: QuizGenerateRequest = { ...generateParams }
     if (selectedSubjectId) params.subject_id = selectedSubjectId
     if (selectedDocumentId) params.document_id = selectedDocumentId
-    await generateQuiz.mutateAsync(params)
-    setGenerateOpen(false)
+    try {
+      await generateQuiz.mutateAsync(params)
+      setGenerateOpen(false)
+    } catch {
+      // The mutation hook shows the readable error toast.
+    }
   }
 
   const handleDelete = async () => {
     if (deleteTarget) {
-      await deleteQuiz.mutateAsync(deleteTarget)
-      setDeleteTarget(null)
+      try {
+        await deleteQuiz.mutateAsync(deleteTarget)
+        setDeleteTarget(null)
+      } catch {
+        // The mutation hook shows the readable error toast.
+      }
     }
   }
 
@@ -102,9 +112,17 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      {isError ? (
+        <ErrorState
+          title="Failed to load quizzes"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
         </div>
       ) : !quizzes || quizzes.length === 0 ? (
         <Card>

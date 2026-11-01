@@ -3,11 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { documentApi } from '@/services/api'
 import { DocumentPage, DocumentChunk } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, FileText, Upload, Pencil, Check, X, RefreshCw, Trash2, Maximize2 } from 'lucide-react'
+import { FileText, Upload, Pencil, Check, X, RefreshCw, Trash2, Maximize2 } from 'lucide-react'
 import { useState } from 'react'
 import { useDeleteDocument, useRerunPageOcr, useRetryDocument } from '@/hooks/use-documents'
+import { toast } from '@/hooks/use-toast'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,19 +34,12 @@ function PageImage({ documentId, page }: { documentId: string; page: DocumentPag
 
   if (isError || !data?.url) {
     return (
-      <div
-        role="alert"
-        className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-md border bg-muted/30 p-4 text-center"
-      >
-        <AlertCircle className="h-8 w-8 text-destructive" />
-        <p className="text-sm font-medium">Could not load page image.</p>
-        <p className="text-xs text-muted-foreground">
-          {error instanceof Error ? error.message : 'Please try again.'}
-        </p>
-        <Button variant="link" size="sm" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </div>
+      <ErrorState
+        title="Could not load page image"
+        message={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+        className="min-h-48 py-6"
+      />
     )
   }
 
@@ -78,7 +73,13 @@ export default function DocumentDetail() {
   const [editText, setEditText] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
 
-  const { data: document, isLoading } = useQuery({
+  const {
+    data: document,
+    isLoading,
+    isError: documentError,
+    error: documentQueryError,
+    refetch: refetchDocument,
+  } = useQuery({
     queryKey: ['documents', id],
     queryFn: () => documentApi.get(id!),
     enabled: !!id,
@@ -88,13 +89,23 @@ export default function DocumentDetail() {
     },
   })
 
-  const { data: pages } = useQuery({
+  const {
+    data: pages,
+    isError: pagesError,
+    error: pagesQueryError,
+    refetch: refetchPages,
+  } = useQuery({
     queryKey: ['documents', id, 'pages'],
     queryFn: () => documentApi.getPages(id!),
     enabled: !!id,
   })
 
-  const { data: chunks } = useQuery({
+  const {
+    data: chunks,
+    isError: chunksError,
+    error: chunksQueryError,
+    refetch: refetchChunks,
+  } = useQuery({
     queryKey: ['documents', id, 'chunks'],
     queryFn: () => documentApi.getChunks(id!),
     enabled: !!id && document?.status === 'ready',
@@ -108,6 +119,9 @@ export default function DocumentDetail() {
       queryClient.invalidateQueries({ queryKey: ['documents', id, 'chunks'] })
       setEditingPageId(null)
       setEditText('')
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to save page', description: error.message, variant: 'destructive' })
     },
   })
 
@@ -148,10 +162,19 @@ export default function DocumentDetail() {
     )
   }
 
+  if (documentError) {
+    return (
+      <ErrorState
+        title="Failed to load document"
+        message={documentQueryError instanceof Error ? documentQueryError.message : undefined}
+        onRetry={() => refetchDocument()}
+      />
+    )
+  }
+
   if (!document) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
         <p className="mt-4 text-muted-foreground">Document not found</p>
         <Button onClick={() => navigate('/documents')} className="mt-4">
           Back to Documents
@@ -218,7 +241,14 @@ export default function DocumentDetail() {
             <FileText className="h-5 w-5" />
             Pages
           </h2>
-          {pages && pages.length > 0 ? (
+          {pagesError ? (
+            <ErrorState
+              title="Failed to load pages"
+              message={pagesQueryError instanceof Error ? pagesQueryError.message : undefined}
+              onRetry={() => refetchPages()}
+              className="mt-2 py-6"
+            />
+          ) : pages && pages.length > 0 ? (
             <div className="mt-2 space-y-3">
               {pages.map((page: DocumentPage) => {
                 const isRerunning =
@@ -339,7 +369,14 @@ export default function DocumentDetail() {
             <Upload className="h-5 w-5" />
             Chunks ({chunks?.length || 0})
           </h2>
-          {chunks && chunks.length > 0 ? (
+          {chunksError ? (
+            <ErrorState
+              title="Failed to load chunks"
+              message={chunksQueryError instanceof Error ? chunksQueryError.message : undefined}
+              onRetry={() => refetchChunks()}
+              className="mt-2 py-6"
+            />
+          ) : chunks && chunks.length > 0 ? (
             <div className="mt-2 space-y-2">
               {chunks.slice(0, 5).map((chunk: DocumentChunk) => (
                 <div key={chunk.id} className="rounded-md bg-muted p-3">

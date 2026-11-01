@@ -1,5 +1,7 @@
 import { usePlannerPlan, useGenerateSchedule, useRegenerateSchedule, useUpdateTask } from '@/hooks/use-planner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Clock, CheckCircle, Loader2, RotateCw } from 'lucide-react'
@@ -10,7 +12,7 @@ import { useState } from 'react'
 
 export default function PlanDetail() {
   const { id } = useParams<{ id: string }>()
-  const { data: plan, isLoading } = usePlannerPlan(id!)
+  const { data: plan, isLoading, isError, error, refetch } = usePlannerPlan(id!)
   const generate = useGenerateSchedule()
   const regenerate = useRegenerateSchedule()
   const updateTask = useUpdateTask()
@@ -18,9 +20,21 @@ export default function PlanDetail() {
 
   if (isLoading) {
     return (
-      <div className="flex h-32 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-24 w-full" />
       </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Failed to load study plan"
+        message={error instanceof Error ? error.message : undefined}
+        onRetry={() => refetch()}
+      />
     )
   }
 
@@ -44,8 +58,8 @@ export default function PlanDetail() {
     try {
       await generate.mutateAsync(id!)
       toast({ title: 'Schedule generated', description: 'Your study tasks have been scheduled.' })
-    } catch (err) {
-      toast({ title: 'Failed', description: err instanceof Error ? err.message : 'Could not generate schedule', variant: 'destructive' })
+    } catch {
+      // The mutation hook shows the readable error toast.
     } finally {
       setGenerating(false)
     }
@@ -55,16 +69,16 @@ export default function PlanDetail() {
     try {
       await regenerate.mutateAsync(id!)
       toast({ title: 'Schedule regenerated', description: 'Pending tasks have been rescheduled.' })
-    } catch (err) {
-      toast({ title: 'Failed', description: err instanceof Error ? err.message : 'Could not regenerate', variant: 'destructive' })
+    } catch {
+      // The mutation hook shows the readable error toast.
     }
   }
 
   const handleTaskStatus = async (task: StudyTask, status: 'pending' | 'in_progress' | 'completed') => {
     try {
       await updateTask.mutateAsync({ taskId: task.id, data: { status } })
-    } catch (err) {
-      toast({ title: 'Failed', description: 'Could not update task', variant: 'destructive' })
+    } catch {
+      // The mutation hook shows the readable error toast.
     }
   }
 

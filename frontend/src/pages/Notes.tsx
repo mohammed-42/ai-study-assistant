@@ -5,6 +5,8 @@ import { useDocuments } from '@/hooks/use-documents'
 import { useSubjects } from '@/hooks/use-subjects'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Sparkles, Trash2, Pencil } from 'lucide-react'
 import {
@@ -32,7 +34,7 @@ interface NotesProps {
 
 export default function Notes({ subjectId }: NotesProps) {
   const navigate = useNavigate()
-  const { data: notes, isLoading } = useNotes(subjectId)
+  const { data: notes, isLoading, isError, error, refetch } = useNotes(subjectId)
   const generateNote = useGenerateNote()
   const deleteNote = useDeleteNote()
   const [generateOpen, setGenerateOpen] = useState(false)
@@ -61,8 +63,12 @@ export default function Notes({ subjectId }: NotesProps) {
     }
     if (selectedSubjectId) params.subject_id = selectedSubjectId
     if (selectedDocumentId) params.document_id = selectedDocumentId
-    await generateNote.mutateAsync(params)
-    setGenerateOpen(false)
+    try {
+      await generateNote.mutateAsync(params)
+      setGenerateOpen(false)
+    } catch {
+      // The mutation hook shows the readable error toast.
+    }
   }
 
   const noteTypeLabel = (t: NoteType) => {
@@ -87,9 +93,17 @@ export default function Notes({ subjectId }: NotesProps) {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      {isError ? (
+        <ErrorState
+          title="Failed to load notes"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
         </div>
       ) : !notes || notes.length === 0 ? (
         <Card>

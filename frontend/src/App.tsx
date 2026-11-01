@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/toast'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import Layout from '@/layouts/MainLayout'
 import Login from '@/pages/Login'
@@ -54,9 +55,10 @@ function StudyPlannerAlias() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route
@@ -87,10 +89,11 @@ export default function App() {
             <Route path="/study-planner" element={<Navigate to="/planner" replace />} />
             <Route path="/study-planner/:id" element={<StudyPlannerAlias />} />
             <Route path="*" element={<NotFound />} />
-          </Routes>
-          <Toaster />
-        </AuthProvider>
-      </BrowserRouter>
+            </Routes>
+            <Toaster />
+          </AuthProvider>
+        </BrowserRouter>
+      </ErrorBoundary>
     </QueryClientProvider>
   )
 }

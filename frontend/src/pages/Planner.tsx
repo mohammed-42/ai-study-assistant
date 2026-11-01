@@ -1,5 +1,7 @@
 import { usePlannerPlans, useDeletePlan, useCreatePlan } from '@/hooks/use-planner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Plus, Trash2, Calendar, Clock } from 'lucide-react'
@@ -27,7 +29,7 @@ type PlanFormValues = z.infer<typeof planFormSchema>
 const DAY_OPTIONS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 export default function Planner() {
-  const { data: plans, isLoading } = usePlannerPlans()
+  const { data: plans, isLoading, isError, error, refetch } = usePlannerPlans()
   const deletePlan = useDeletePlan()
   const createPlan = useCreatePlan()
   const [createOpen, setCreateOpen] = useState(false)
@@ -52,8 +54,8 @@ export default function Planner() {
       setCreateOpen(false)
       form.reset()
       toast({ title: 'Plan created', description: 'Your study plan has been created.' })
-    } catch (err) {
-      toast({ title: 'Failed', description: err instanceof Error ? err.message : 'Something went wrong', variant: 'destructive' })
+    } catch {
+      // The mutation hook shows the readable error toast.
     }
   }
 
@@ -146,9 +148,17 @@ export default function Planner() {
         </Dialog>
       </div>
 
-      {isLoading ? (
-        <div className="flex h-32 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      {isError ? (
+        <ErrorState
+          title="Failed to load study plans"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-48 w-full" />
+          ))}
         </div>
       ) : !plans || plans.length === 0 ? (
         <Card>
@@ -198,7 +208,11 @@ export default function Planner() {
                     aria-label={`Delete study plan ${plan.title}`}
                     onClick={async () => {
                       if (confirm('Delete this study plan and all its tasks?')) {
-                        await deletePlan.mutateAsync(plan.id)
+                        try {
+                          await deletePlan.mutateAsync(plan.id)
+                        } catch {
+                          // The mutation hook shows the readable error toast.
+                        }
                       }
                     }}
                   >

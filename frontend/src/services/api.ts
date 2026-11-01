@@ -1,10 +1,85 @@
 import { AppDocument, DocumentPage, DocumentChunk, ChatSession, ChatMessage, TutorRequest, Note, NoteCreate, Quiz, QuizAttempt, QuizSummary, QuizGenerateRequest, QuizSubmitRequest, StudyPlan, StudyPlanCreate, StudyPlanUpdate, StudyTask, StudyTaskUpdate, DashboardData, UserProfile } from '@/types'
-import { getAccessToken } from './supabase'
+import { createSupabaseClient, getAccessToken } from './supabase'
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
+const NETWORK_ERROR = "Can't reach the server. Check your connection."
+const SESSION_ERROR = 'Your session expired. Please sign in again.'
+const GENERIC_ERROR = 'Something went wrong. Please try again.'
+
+export class ApiError extends Error {
+  status?: number
+
+  constructor(message: string, status?: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+function validationMessages(detail: unknown): string | null {
+  if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  if (!Array.isArray(detail)) return null
+
+  const messages = detail
+    .map((item) => {
+      if (typeof item === 'string') return item
+      if (!item || typeof item !== 'object') return null
+      const entry = item as Record<string, unknown>
+      const msg = typeof entry.msg === 'string' ? entry.msg : null
+      if (!msg) return null
+      const location = Array.isArray(entry.loc)
+        ? entry.loc.filter((part) => part !== 'body').join('.')
+        : ''
+      return location ? `${location}: ${msg}` : msg
+    })
+    .filter((message): message is string => Boolean(message))
+
+  return messages.length > 0 ? messages.join('; ') : null
+}
+
+function backendMessage(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null
+  const record = body as Record<string, unknown>
+  return validationMessages(record.detail) ?? (typeof record.message === 'string' ? record.message : null)
+}
+
+function messageForStatus(status: number, detail: string | null): string {
+  if (status === 401) return SESSION_ERROR
+  if (status === 403) return detail ?? "You don't have permission to do that."
+  if (status === 404) return detail ?? 'The requested item was not found.'
+  if (status === 422) return detail ?? 'Please check the form and try again.'
+  if (status === 429) return detail ?? 'You have reached a usage limit. Please try again later.'
+  if (status === 503) return detail ?? 'The service is temporarily unavailable. Please try again later.'
+  if (status >= 500) return GENERIC_ERROR
+  return detail ?? GENERIC_ERROR
+}
+
+async function handleUnauthorized() {
+  try {
+    await createSupabaseClient().auth.signOut()
+  } catch {
+    // Ignore sign-out failures; the redirect still clears the expired session view.
+  }
+
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem('auth_notice', SESSION_ERROR)
+  } catch {
+    // Storage may be unavailable in private browsing.
+  }
+  if (window.location.pathname !== '/login') {
+    window.location.assign('/login')
+  }
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T | undefined> {
-  const token = await getAccessToken()
+  let token: string | null = null
+  try {
+    token = await getAccessToken()
+  } catch {
+    token = null
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -12,14 +87,22 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     ...(options.headers as Record<string, string> || {}),
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+    })
+  } catch {
+    throw new ApiError(NETWORK_ERROR)
+  }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }))
-    throw new Error(typeof error.detail === 'string' ? error.detail : (error.message || response.statusText))
+    const body = await response.json().catch(() => null)
+    if (response.status === 401) {
+      await handleUnauthorized()
+    }
+    throw new ApiError(messageForStatus(response.status, backendMessage(body)), response.status)
   }
 
   if (response.status === 204) return undefined as T

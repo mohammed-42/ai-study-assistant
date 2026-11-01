@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/error-state'
 import { useToast } from '@/hooks/use-toast'
 import type { ChatMessage } from '@/types'
 import { Send, ChevronLeft, Loader2 } from 'lucide-react'
@@ -21,7 +22,7 @@ export default function TutorSession() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [isTyping, setIsTyping] = useState(false)
 
-  const { data: messages, isLoading } = useQuery({
+  const { data: messages, isLoading, isError, error, refetch } = useQuery({
     queryKey: QUERY_KEY(sessionId!),
     queryFn: () => chatApi.listMessages(sessionId!),
     refetchInterval: 3000, // Poll for new messages
@@ -78,6 +79,12 @@ export default function TutorSession() {
               </div>
             ))}
           </div>
+        ) : isError ? (
+          <ErrorState
+            title="Failed to load messages"
+            message={error instanceof Error ? error.message : undefined}
+            onRetry={() => refetch()}
+          />
         ) : messages && messages.length > 0 ? (
           messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
