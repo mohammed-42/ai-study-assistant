@@ -4,11 +4,11 @@
 
 - **Phase:** 7 — Hardening. Code complete; live verification partial (Gemini daily quota blocks final planner rerun).
 - **Live verification:** tutor, notes, quizzes LIVE-VERIFIED; planner PARTIAL; full smoke stopped on Gemini 429 daily quota.
-- **Backend tests:** 160/160 passing (mocked/hermetic).
+- **Backend tests:** 170/170 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** `d93bb9c test: live feature checks, fixes`.
+- **Latest commit:** pending `feat: reliable chunk pages and resolved tutor citations`.
 - **Session:** Paused on 2026-10-26 after Gemini free-tier quota exhaustion; resume by rerunning `backend/scripts/smoke_features.py` after quota reset.
-- **Last updated:** 2026-10-26
+- **Last updated:** 2026-11-01
 
 ---
 
@@ -32,7 +32,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 163 passed in 55.17s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 170 passed in 53.45s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
@@ -47,6 +47,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | OCR per-document and daily limits | UNIT-TESTED (mocked) | `test_over_per_document_ocr_cap_fails_without_calling_ocr`, `test_scanned_pdf_over_daily_limit_fails_without_calling_ocr`, `test_ocr_exactly_at_per_document_cap_passes` |
 | Re-run OCR for one page | LIVE-VERIFIED | Live handwriting smoke: upload status=uploaded/ready in 31.8s; rerun-ocr HTTP 200; new text length=207; old_chunks_remaining=0; new_chunk_count=1 min_l2=0.590280; cleanup documents/chunks/pages/jobs=0 and profiles/subjects/chat_sessions/study_plans equal (3/2/2/1). Mocked tests: `test_rerun_ocr_replaces_text_and_chunks`, `test_rerun_ocr_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_quota_returns_503_and_keeps_old_data`, `test_rerun_ocr_embedding_failure_keeps_old_text_and_chunks`, `test_rerun_ocr_other_user_gets_404`, `test_rerun_ocr_page_without_image_gets_400`, `test_rerun_ocr_daily_limit_reached` |
 | Cross-user isolation | UNIT-TESTED (mocked) | `tests/test_isolation.py` (19 tests): users A/B across documents, pages, chunks, page image URL, rerun-ocr, chat sessions/messages, notes, quizzes/attempts, study plans/tasks; unauthenticated and garbage-token requests return 401. Fixed planner dashboard leak of other users' today tasks. |
+| Chunk page mapping | UNIT-TESTED (mocked) | `tests/test_chunk_pages.py` (3 tests): three-page text verifies chunks inside one page, across two pages, and across three pages; chunk size/overlap behavior unchanged. |
 | Retry after embedding failure | UNIT-TESTED (mocked) | Retry reaches ready without duplicate chunks |
 | Processing job state | IMPLEMENTED | Jobs set completed/failed; smoke cleanup shows 0 job rows |
 | PDF text extraction (PyMuPDF) | LIVE-VERIFIED | fitz 1.28.2 opened `samples/sample.pdf`: 3 pages, chars `[1935, 2198, 1205]` |
@@ -63,6 +64,8 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
 | Migrations on a blank DB | NOT VERIFIED | — |
 | Tutor against real Gemini | LIVE-VERIFIED | `smoke_features.py`: "What is a component?" -> answer_length=187, citations=1 (`sample.pdf p1`); off-topic question -> `is_insufficient=True`, citations=0; follow-up -> answer_length=385, citations=1. |
+| Resolved tutor citations | UNIT-TESTED (mocked) | `tests/test_citations.py`: database resolves document name, page range, OCR/needs_review/user_edited flags; invalid/foreign chunk IDs dropped; API and history return citation objects, not chunk IDs. Browser UI NOT VERIFIED. |
+| Tutor streaming endpoint | NOT IMPLEMENTED | Frontend never used `/messages/stream`; removed unused endpoint and `stream` parameter. No streaming test remains. |
 | Notes against real Gemini | LIVE-VERIFIED | Summary/key_concepts/definitions/revision all HTTP 201, content lengths 1565/1790/1596/4124, saved=True, raw_json=False; edit persisted; delete HTTP 204 then GET 404. |
 | Quizzes against real Gemini | LIVE-VERIFIED | Generate/list/get hide `correct_option_index`, `model_answer`, `explanation`; mixed quiz 3 questions; all-correct=100, all-wrong=0; summary attempts=2 avg=50.0 best=100; short-answer paraphrase correct, unrelated answer incorrect. |
 | Planner against real Gemini | PARTIAL | Create plan, generate 3 tasks (max 45 min/day, within exam window), mark done, regenerate preserved completed. Observed duplicate pending topics before fix; dashboard returned HTTP 500 in full run (transient), targeted dashboard returned 200 with `active_plans=1`, `today_pending=2`, `progress total=5 completed=1` after. Regenerate fix unit-tested; full-script dashboard rerun blocked by Gemini daily quota. |

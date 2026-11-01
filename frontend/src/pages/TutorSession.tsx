@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '@/services/api'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -149,16 +150,33 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         </div>
         
         {/* Citations */}
-        {!isUser && message.citation_ids && message.citation_ids.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1 justify-start">
-            {message.citation_ids.map((id) => (
-              <span
-                key={id}
-                className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground"
-              >
-                <span className="font-mono text-xs">{id.slice(0, 8)}...</span>
-              </span>
-            ))}
+        {!isUser && message.citations && message.citations.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2 justify-start" aria-label="Sources">
+            {message.citations.map((citation) => {
+              const pageLabel =
+                citation.page_start === citation.page_end
+                  ? `p. ${citation.page_start}`
+                  : `pp. ${citation.page_start}-${citation.page_end}`
+              return (
+                <Link
+                  key={citation.chunk_id}
+                  to={`/documents/${citation.document_id}`}
+                  className="inline-flex max-w-full flex-wrap items-center gap-1 rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="break-words">
+                    {citation.document_name}, {pageLabel}
+                  </span>
+                  {citation.has_unverified_ocr && (
+                    <Badge
+                      variant="outline"
+                      className="border-yellow-300 bg-yellow-50 text-yellow-800"
+                    >
+                      OCR - unverified
+                    </Badge>
+                  )}
+                </Link>
+              )
+            })}
           </div>
         )}
         

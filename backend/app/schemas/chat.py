@@ -22,35 +22,30 @@ class ChatSessionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CitationOut(BaseModel):
+    chunk_id: str
+    document_id: str
+    document_name: str
+    page_start: int
+    page_end: int
+    is_ocr: bool
+    needs_review: bool
+    user_edited: bool
+    has_unverified_ocr: bool
+
+    model_config = {"from_attributes": True}
+
+
 class ChatMessageOut(BaseModel):
     id: UUID
     session_id: UUID
     role: str
     content: str
-    citation_ids: list[str] | None
+    citations: list[CitationOut] | None = None
     is_insufficient: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
-    
-    @classmethod
-    def from_orm(cls, obj) -> "ChatMessageOut":
-        data = {
-            "id": obj.id,
-            "session_id": obj.session_id,
-            "role": obj.role,
-            "content": obj.content,
-            "is_insufficient": obj.is_insufficient,
-            "created_at": obj.created_at,
-        }
-        if obj.citation_ids:
-            try:
-                data["citation_ids"] = json.loads(obj.citation_ids)
-            except (json.JSONDecodeError, TypeError):
-                data["citation_ids"] = []
-        else:
-            data["citation_ids"] = None
-        return cls(**data)
 
 
 class MessageCreate(BaseModel):

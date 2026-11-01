@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
@@ -18,20 +17,39 @@ from app.db.base import get_db
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.document import Document
-from app.models.document_chunk import DocumentChunk
 from app.models.profile import Profile
+from app.rag.citations import resolve_citations
 from app.rag.generator import AnswerResult, generate_answer
-from app.rag.retriever import RetrievalResult, retrieve_chunks
+from app.rag.retriever import retrieve_chunks
 from app.schemas.chat import (
     ChatMessageOut,
     ChatSessionCreate,
     ChatSessionOut,
+    CitationOut,
     MessageCreate,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+def _parse_citation_ids(raw: str | None) -> list[str]:
+    """Parse stored citation IDs, tolerating legacy values."""
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    citation_ids: list[str] = []
+    for item in data:
+        value = item.get("chunk_id") if isinstance(item, dict) else item
+        if value:
+            citation_ids.append(str(value))
+    return citation_ids
 
 
 # --- Session endpoints ---
@@ -100,13 +118,13 @@ async def delete_session(
 # --- Message endpoints ---
 
 
-@router.get("/sessions/{session_id}/messages", response_model=list[dict])
+@router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageOut])
 async def list_messages(
     session_id: str,
     db: AsyncSession = Depends(get_db),
     user: Profile = Depends(get_current_user),
 ):
-    """List all messages in a chat session."""
+    """List all messages in a chat session with resolved citations."""
     await _get_owner_session(db, uuid.UUID(session_id), user.id)
     stmt = (
         select(ChatMessage)
@@ -115,24 +133,34 @@ async def list_messages(
     )
     result = await db.execute(stmt)
     messages = result.scalars().all()
-    
-    # Convert to dicts with parsed citation_ids
+
+    parsed_ids = {
+        msg.id: _parse_citation_ids(msg.citation_ids)
+        for msg in messages
+    }
+    all_citation_ids = [
+        citation_id
+        for citation_ids in parsed_ids.values()
+        for citation_id in citation_ids
+    ]
+    resolved = await resolve_citations(db, user.id, all_citation_ids)
+    citations_by_chunk = {citation.chunk_id: citation for citation in resolved}
+
     output = []
     for msg in messages:
-        citation_ids = None
-        if msg.citation_ids:
-            try:
-                citation_ids = json.loads(msg.citation_ids)
-            except (json.JSONDecodeError, TypeError):
-                citation_ids = []
+        citations = [
+            CitationOut.model_validate(citations_by_chunk[citation_id])
+            for citation_id in parsed_ids[msg.id]
+            if citation_id in citations_by_chunk
+        ]
         output.append({
-            "id": str(msg.id),
-            "session_id": str(msg.session_id),
+            "id": msg.id,
+            "session_id": msg.session_id,
             "role": msg.role,
             "content": msg.content,
-            "citation_ids": citation_ids,
+            "citations": citations,
             "is_insufficient": msg.is_insufficient,
-            "created_at": msg.created_at.isoformat(),
+            "created_at": msg.created_at,
         })
     return output
 
@@ -171,17 +199,16 @@ async def post_message(
             min_similarity=body.min_similarity,
         )
         
-        # Parse citation IDs from JSON string if needed
-        citation_ids = answer.citations
-        if isinstance(citation_ids, str):
-            try:
-                citation_ids = [str(x) for x in json.loads(citation_ids)]
-            except Exception:
-                citation_ids = []
-        
+        # Resolve citations from the database, dropping invalid/foreign IDs.
+        raw_citations = answer.citations
+        if isinstance(raw_citations, str):
+            citation_ids_list = _parse_citation_ids(raw_citations)
+        else:
+            citation_ids_list = [str(citation_id) for citation_id in raw_citations]
+        citations = await resolve_citations(db, user.id, citation_ids_list)
+
         # Save assistant message
         # citation_ids stored as JSON string in DB
-        citation_ids_list = answer.citations if isinstance(answer.citations, list) else []
         assistant_msg = ChatMessage(
             session_id=session.id,
             role="assistant",
@@ -192,16 +219,16 @@ async def post_message(
         db.add(assistant_msg)
         await db.commit()
         await db.refresh(assistant_msg)
-        
-        # Return as dict with parsed citation_ids
+
+        # Return as dict with resolved citations
         return {
-            "id": str(assistant_msg.id),
-            "session_id": str(assistant_msg.session_id),
+            "id": assistant_msg.id,
+            "session_id": assistant_msg.session_id,
             "role": assistant_msg.role,
             "content": assistant_msg.content,
-            "citation_ids": citation_ids_list,
+            "citations": [CitationOut.model_validate(citation) for citation in citations],
             "is_insufficient": assistant_msg.is_insufficient,
-            "created_at": assistant_msg.created_at.isoformat(),
+            "created_at": assistant_msg.created_at,
         }
         
     except Exception as exc:
@@ -221,49 +248,15 @@ async def post_message(
         db.add(error_msg)
         await db.commit()
         await db.refresh(error_msg)
-        return error_msg
-
-
-@router.post("/sessions/{session_id}/messages/stream", status_code=200)
-async def stream_message(
-    session_id: str,
-    body: MessageCreate,
-    db: AsyncSession = Depends(get_db),
-    user: Profile = Depends(get_current_user),
-):
-    """Stream a user message and get a streaming AI response."""
-    await enforce_rate_limit("ai", user.id, "RATE_LIMIT_AI_PER_MINUTE")
-    session = await _get_owner_session(db, uuid.UUID(session_id), user.id)
-    
-    # Save user message
-    user_msg = ChatMessage(
-        session_id=session.id,
-        role="user",
-        content=body.content,
-    )
-    db.add(user_msg)
-    await db.commit()
-    await db.refresh(user_msg)
-    
-    async def generate_stream() -> AsyncGenerator[str, None]:
-        try:
-            answer = await _generate_ai_response(
-                db=db,
-                question=body.content,
-                session_id=session.id,
-                owner_id=user.id,
-                subject_id=body.subject_id,
-                document_ids=body.document_ids,
-                top_k=body.top_k,
-                min_similarity=body.min_similarity,
-                stream=True,
-            )
-            yield answer
-        except Exception as exc:
-            logger.error("Streaming failed: %s", exc)
-            yield "Error: " + str(exc)
-    
-    return generate_stream()
+        return {
+            "id": error_msg.id,
+            "session_id": error_msg.session_id,
+            "role": error_msg.role,
+            "content": error_msg.content,
+            "citations": [],
+            "is_insufficient": error_msg.is_insufficient,
+            "created_at": error_msg.created_at,
+        }
 
 
 async def _generate_ai_response(
@@ -275,7 +268,6 @@ async def _generate_ai_response(
     document_ids: list[uuid.UUID] | None = None,
     top_k: int = 5,
     min_similarity: float = 0.5,
-    stream: bool = False,
 ) -> AnswerResult:
     """Generate AI response with RAG retrieval."""
     from app.ai.gemini import GeminiOcrProvider

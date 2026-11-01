@@ -474,40 +474,82 @@ async def _count_pages(db: AsyncSession, doc_id: uuid.UUID) -> int:
     return len(result.scalars().all())
 
 
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[str]:
-    """Split text into token-aware chunks (approximate using chars)."""
+def _iter_chunks_with_spans(
+    text: str, chunk_size: int = 800, overlap: int = 120
+) -> list[tuple[str, int, int]]:
+    """Split text into chunks while retaining each chunk's character span."""
     chars_per_token = 4
     chunk_chars = chunk_size * chars_per_token
     overlap_chars = overlap * chars_per_token
 
-    chunks = []
+    chunks: list[tuple[str, int, int]] = []
     start = 0
     while start < len(text):
         end = start + chunk_chars
-        chunk = text[start:end]
-        chunks.append(chunk)
+        chunks.append((text[start:end], start, min(end, len(text))))
         start = end - overlap_chars
 
     return chunks
 
 
-async def create_chunks(db: AsyncSession, document_id: uuid.UUID, pages: list[DocumentPage]) -> None:
-    """Create document chunks from pages."""
-    all_text = "\n\n".join(p.text for p in pages)
-    chunks = chunk_text(all_text)
+def chunk_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[str]:
+    """Split text into token-aware chunks (approximate using chars)."""
+    return [
+        chunk
+        for chunk, _start, _end in _iter_chunks_with_spans(text, chunk_size, overlap)
+    ]
 
-    for i, chunk_content in enumerate(chunks):
+
+def _page_range_for_span(
+    page_spans: list[tuple[int, int, int]], start: int, end: int
+) -> tuple[int, int]:
+    """Return the first and last page numbers whose text intersects the span."""
+    intersecting = [
+        page_number
+        for page_number, page_start, page_end in page_spans
+        if start < page_end and end > page_start
+    ]
+    if intersecting:
+        return min(intersecting), max(intersecting)
+
+    previous = page_spans[0][0] if page_spans else 1
+    for page_number, page_start, page_end in page_spans:
+        if start < page_start:
+            return previous, previous
+        if page_start <= start < page_end:
+            return page_number, page_number
+        previous = page_number
+    return previous, previous
+
+
+async def create_chunks(
+    db: AsyncSession,
+    document_id: uuid.UUID,
+    pages: list[DocumentPage],
+    chunk_size: int = 800,
+    overlap: int = 120,
+) -> None:
+    """Create document chunks from pages."""
+    page_spans: list[tuple[int, int, int]] = []
+    offset = 0
+    for page in pages:
+        page_text = page.text or ""
+        page_spans.append((page.page_number, offset, offset + len(page_text)))
+        offset += len(page_text) + 2
+
+    all_text = "\n\n".join(p.text or "" for p in pages)
+
+    for chunk_content, start, end in _iter_chunks_with_spans(
+        all_text, chunk_size, overlap
+    ):
         if not chunk_content.strip():
             continue
-        total_pages = len(pages)
-        chunk_size = len(all_text) / max(len(chunks), 1)
-        page_start = int(i * chunk_size / max(len(pages), 1))
-        page_end = min(total_pages, page_start + 1)
+        page_start, page_end = _page_range_for_span(page_spans, start, end)
 
         chunk = DocumentChunk(
             document_id=document_id,
-            page_start=page_start + 1,
-            page_end=page_end + 1,
+            page_start=page_start,
+            page_end=page_end,
             content=chunk_content,
             token_count=len(chunk_content) // 4,
         )

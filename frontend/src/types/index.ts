@@ -96,12 +96,24 @@ export interface ChatSession {
   updated_at: string
 }
 
+export interface Citation {
+  chunk_id: string
+  document_id: string
+  document_name: string
+  page_start: number
+  page_end: number
+  is_ocr: boolean
+  needs_review: boolean
+  user_edited: boolean
+  has_unverified_ocr: boolean
+}
+
 export interface ChatMessage {
   id: string
   session_id: string
   role: 'user' | 'assistant'
   content: string
-  citation_ids: string[] | null
+  citations: Citation[] | null
   is_insufficient: boolean
   created_at: string
 }
