@@ -289,12 +289,50 @@ export interface StudyTaskUpdate {
   actual_minutes?: number
 }
 
+export interface DashboardExam {
+  id: string
+  title: string
+  exam_date: string
+  days_left: number
+  subject_id: string | null
+}
+
+export interface DashboardTask {
+  id: string
+  plan_id: string
+  topic: string
+  status: TaskStatus
+  importance: number
+  estimated_minutes: number
+}
+
+export interface DashboardDocument {
+  id: string
+  name: string
+  doc_type: 'pdf' | 'image' | 'multi_image'
+  status: DocumentStatus
+  subject_id: string
+  created_at: string | null
+}
+
+export interface DashboardQuizAttempt {
+  id: string
+  attempt_id: string
+  quiz_id: string
+  quiz_title: string
+  score: number | null
+  date: string | null
+}
+
 export interface DashboardData {
   document_counts: Record<string, number>
   recent_notes: number
-  recent_quizzes: { score: number | null; date: string }[]
+  recent_quizzes: DashboardQuizAttempt[]
+  recent_documents: DashboardDocument[]
+  upcoming_exams: DashboardExam[]
   active_plans_count: number
   today_pending_tasks: number
+  today_tasks: DashboardTask[]
   today_tasks_summary: { id: string; topic: string; estimated_minutes: number }[]
   plan_progress: { total: number; completed: number; percentage: number }
   weak_topics: { topic: string; importance: number }[]

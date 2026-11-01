@@ -3,7 +3,7 @@
 import json
 import pytest
 from unittest.mock import MagicMock
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import uuid as uuid_mod
 
 from fastapi.testclient import TestClient
@@ -14,6 +14,7 @@ from app.api.deps import get_current_user
 from app.models.profile import Profile
 from app.models.planner import StudyPlan, StudyTask, PlanStatus, TaskStatus
 from app.models.document import Document, DocumentStatus
+from app.models.quiz import Quiz, QuizAttempt
 
 
 @pytest.fixture
@@ -286,3 +287,124 @@ class TestDashboard:
         resp = client.get("/api/planner/dashboard")
         data = resp.json()
         assert data["document_counts"].get("ready", 0) >= 1
+
+    @pytest.mark.asyncio
+    async def test_dashboard_upcoming_exams_nearest_first(
+        self, client, test_user, db_session
+    ):
+        today = date.today()
+        await _create_plan(
+            db_session, owner_id=test_user.id, title="Far",
+            exam_date=today + timedelta(days=9),
+        )
+        await _create_plan(
+            db_session, owner_id=test_user.id, title="Near",
+            exam_date=today + timedelta(days=2),
+        )
+        await _create_plan(
+            db_session, owner_id=test_user.id, title="Past",
+            exam_date=today - timedelta(days=3),
+        )
+
+        data = client.get("/api/planner/dashboard").json()
+        assert [e["title"] for e in data["upcoming_exams"]] == ["Near", "Far"]
+        assert [e["days_left"] for e in data["upcoming_exams"]] == [2, 9]
+
+    @pytest.mark.asyncio
+    async def test_dashboard_today_tasks_include_status(
+        self, client, test_user, db_session
+    ):
+        plan = await _create_plan(db_session, owner_id=test_user.id)
+        today = date.today()
+        for topic, status in [("Pending task", TaskStatus.PENDING), ("Done task", TaskStatus.COMPLETED)]:
+            db_session.add(
+                StudyTask(
+                    plan_id=plan.id, topic=topic, importance=5,
+                    scheduled_days="mon", scheduled_date=today,
+                    status=status, estimated_minutes=30,
+                )
+            )
+        await db_session.commit()
+
+        data = client.get("/api/planner/dashboard").json()
+        by_topic = {t["topic"]: t for t in data["today_tasks"]}
+        assert by_topic["Pending task"]["status"] == "pending"
+        assert by_topic["Done task"]["status"] == "completed"
+        assert data["today_pending_tasks"] == 1
+
+    @pytest.mark.asyncio
+    async def test_dashboard_recent_documents_last_five(
+        self, client, test_user, db_session, test_subject
+    ):
+        base = datetime(2026, 1, 1, 12, 0, 0)
+        for i in range(6):
+            db_session.add(
+                Document(
+                    owner_id=test_user.id, subject_id=test_subject.id,
+                    name=f"Doc {i}.pdf", doc_type="pdf",
+                    status=DocumentStatus.READY, page_count=1,
+                    created_at=base + timedelta(minutes=i),
+                )
+            )
+        await db_session.commit()
+
+        data = client.get("/api/planner/dashboard").json()
+        names = [d["name"] for d in data["recent_documents"]]
+        assert names == ["Doc 5.pdf", "Doc 4.pdf", "Doc 3.pdf", "Doc 2.pdf", "Doc 1.pdf"]
+        assert data["recent_documents"][0]["status"] == "ready"
+
+    @pytest.mark.asyncio
+    async def test_dashboard_recent_quizzes_include_title(
+        self, client, test_user, db_session
+    ):
+        quiz = Quiz(owner_id=test_user.id, title="Algebra quiz", question_count=2)
+        db_session.add(quiz)
+        await db_session.commit()
+        await db_session.refresh(quiz)
+        for i, score in enumerate([100, 50]):
+            db_session.add(
+                QuizAttempt(
+                    quiz_id=quiz.id, user_id=test_user.id, score=score,
+                    total_questions=2, correct_answers=score // 50,
+                    created_at=datetime(2026, 1, 1, 12, i, 0),
+                )
+            )
+        await db_session.commit()
+
+        data = client.get("/api/planner/dashboard").json()
+        assert len(data["recent_quizzes"]) == 2
+        assert data["recent_quizzes"][0]["quiz_title"] == "Algebra quiz"
+        assert data["recent_quizzes"][0]["quiz_id"] == str(quiz.id)
+        assert data["recent_quizzes"][0]["score"] == 50
+
+    @pytest.mark.asyncio
+    async def test_dashboard_recent_lists_exclude_other_users(
+        self, client, test_user, db_session, test_subject
+    ):
+        other = Profile(sub="other-dash", email="other-dash@example.com")
+        db_session.add(other)
+        await db_session.commit()
+        await db_session.refresh(other)
+
+        db_session.add(
+            Document(
+                owner_id=other.id, subject_id=test_subject.id,
+                name="Other.pdf", doc_type="pdf",
+                status=DocumentStatus.READY, page_count=1,
+            )
+        )
+        quiz = Quiz(owner_id=other.id, title="Other quiz", question_count=1)
+        db_session.add(quiz)
+        await db_session.commit()
+        await db_session.refresh(quiz)
+        db_session.add(
+            QuizAttempt(
+                quiz_id=quiz.id, user_id=other.id, score=90,
+                total_questions=1, correct_answers=1,
+            )
+        )
+        await db_session.commit()
+
+        data = client.get("/api/planner/dashboard").json()
+        assert data["recent_documents"] == []
+        assert data["recent_quizzes"] == []

@@ -293,17 +293,44 @@ async def get_dashboard(
     )
     recent_notes = (await db.execute(note_stmt)).scalar() or 0
 
-    # Recent quiz attempts
+    # Recent quiz attempts with the quiz title (owner-scoped)
     attempt_stmt = (
-        select(QuizAttempt.score, QuizAttempt.created_at)
+        select(QuizAttempt, Quiz)
+        .join(Quiz, QuizAttempt.quiz_id == Quiz.id)
         .where(QuizAttempt.user_id == user.id)
         .order_by(QuizAttempt.created_at.desc())
         .limit(5)
     )
-    attempts = await db.execute(attempt_stmt)
+    attempt_rows = (await db.execute(attempt_stmt)).all()
     recent_quizzes = [
-        {"score": a.score, "date": a.created_at.isoformat()}
-        for a in attempts.scalars().all()
+        {
+            "id": str(attempt.id),
+            "attempt_id": str(attempt.id),
+            "quiz_id": str(quiz.id),
+            "quiz_title": quiz.title,
+            "score": attempt.score,
+            "date": attempt.created_at.isoformat() if attempt.created_at else None,
+        }
+        for attempt, quiz in attempt_rows
+    ]
+
+    # Recent materials (last 5 documents, owner-scoped)
+    recent_doc_stmt = (
+        select(Document)
+        .where(Document.owner_id == user.id)
+        .order_by(Document.created_at.desc())
+        .limit(5)
+    )
+    recent_documents = [
+        {
+            "id": str(d.id),
+            "name": d.name,
+            "doc_type": d.doc_type,
+            "status": d.status.value if hasattr(d.status, "value") else d.status,
+            "subject_id": str(d.subject_id),
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        }
+        for d in (await db.execute(recent_doc_stmt)).scalars().all()
     ]
 
     # Active plans and today's tasks
@@ -314,6 +341,18 @@ async def get_dashboard(
     )
     active_plans = (await db.execute(plan_stmt)).scalars().all()
 
+    upcoming_exams = [
+        {
+            "id": str(p.id),
+            "title": p.title,
+            "exam_date": p.exam_date.isoformat(),
+            "days_left": (p.exam_date - today).days,
+            "subject_id": str(p.subject_id) if p.subject_id else None,
+        }
+        for p in sorted(active_plans, key=lambda p: p.exam_date)
+        if p.exam_date >= today
+    ]
+
     task_stmt = select(StudyTask).where(
         StudyTask.scheduled_date == today,
         StudyTask.status == TaskStatus.PENDING,
@@ -323,6 +362,29 @@ async def get_dashboard(
     )
     today_tasks_result = await db.execute(task_stmt)
     today_tasks = today_tasks_result.scalars().all()
+
+    # All of today's tasks (any status) for the dashboard checklist
+    today_all_stmt = (
+        select(StudyTask)
+        .where(
+            StudyTask.scheduled_date == today,
+            StudyTask.plan_id.in_(
+                select(StudyPlan.id).where(StudyPlan.owner_id == user.id)
+            ),
+        )
+        .order_by(StudyTask.importance.desc())
+    )
+    today_all_tasks = [
+        {
+            "id": str(t.id),
+            "plan_id": str(t.plan_id),
+            "topic": t.topic,
+            "status": t.status.value if hasattr(t.status, "value") else t.status,
+            "importance": t.importance,
+            "estimated_minutes": t.estimated_minutes,
+        }
+        for t in (await db.execute(today_all_stmt)).scalars().all()
+    ]
 
     # Overall progress
     all_plan_tasks_stmt = select(StudyTask).where(
@@ -359,8 +421,11 @@ async def get_dashboard(
         "document_counts": doc_by_status,
         "recent_notes": recent_notes,
         "recent_quizzes": recent_quizzes,
+        "recent_documents": recent_documents,
+        "upcoming_exams": upcoming_exams,
         "active_plans_count": len(active_plans),
         "today_pending_tasks": len(today_tasks),
+        "today_tasks": today_all_tasks,
         "today_tasks_summary": [
             {"id": str(t.id), "topic": t.topic, "estimated_minutes": t.estimated_minutes}
             for t in today_tasks[:5]

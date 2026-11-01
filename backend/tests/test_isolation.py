@@ -295,6 +295,39 @@ async def test_study_plans_and_tasks_are_isolated(
     )
 
 
+@pytest.mark.asyncio
+async def test_dashboard_recent_lists_are_isolated(
+    db_session, test_user, test_subject, user_b, client
+):
+    doc, _page, _chunk = await _seed_document(db_session, test_user, test_subject)
+    quiz = Quiz(owner_id=test_user.id, title="Owner A quiz", question_count=1)
+    db_session.add(quiz)
+    await db_session.commit()
+    await db_session.refresh(quiz)
+    db_session.add(
+        QuizAttempt(
+            quiz_id=quiz.id,
+            user_id=test_user.id,
+            total_questions=1,
+            correct_answers=1,
+            score=100,
+        )
+    )
+    await db_session.commit()
+
+    _act_as(user_b)
+    dashboard = client.get("/api/planner/dashboard").json()
+    assert dashboard["recent_documents"] == []
+    assert dashboard["recent_quizzes"] == []
+    assert dashboard["upcoming_exams"] == []
+    assert dashboard["today_tasks"] == []
+
+    _act_as(test_user)
+    dashboard = client.get("/api/planner/dashboard").json()
+    assert [d["id"] for d in dashboard["recent_documents"]] == [str(doc.id)]
+    assert [a["quiz_title"] for a in dashboard["recent_quizzes"]] == ["Owner A quiz"]
+
+
 AUTH_PATHS = [
     "/api/subjects/",
     "/api/documents/",

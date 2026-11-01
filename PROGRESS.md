@@ -4,9 +4,9 @@
 
 - **Phase:** 7 — Hardening. Code complete; live verification partial (Gemini daily quota blocks final planner rerun).
 - **Live verification:** tutor, notes, quizzes LIVE-VERIFIED; planner PARTIAL; full smoke stopped on Gemini 429 daily quota.
-- **Backend tests:** 184/184 passing (mocked/hermetic).
+- **Backend tests:** 190/190 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** pending `feat: settings, account deletion, not-found page, route aliases`.
+- **Latest commit:** `feat: dashboard shows exams, tasks, materials and quiz scores`.
 - **Session:** Paused on 2026-10-26 after Gemini free-tier quota exhaustion; resume by rerunning `backend/scripts/smoke_features.py` after quota reset.
 - **Last updated:** 2026-11-01
 
@@ -65,6 +65,8 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | Document retry/delete/filter/pagination | UNIT-TESTED (mocked) | Backend list accepts `subject_id`/`limit`/`offset`; defaults preserve unpaginated behavior (`test_list_documents_paginated`, `test_list_documents_filtered_pagination`). Subject filtering is server-side before pagination. Documents page adds 10-row pagination, failed-only retry with error text and polling, delete confirmation; detail header adds failed-only retry and delete with polling. `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Scanned PDF page images + side-by-side review | UNIT-TESTED (mocked) | OCR-rendered PDF pages are saved as JPEG quality 85 under `user/<owner>/<document>/page_<n>.jpg`; text-layer pages have no image; rerun OCR succeeds from the saved image; document delete removes page images. DocumentDetail shows the signed image left and text/controls right, with skeleton, retry, full-size link, and vertical stacking below `md`. `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Settings, account deletion, not-found, aliases | UNIT-TESTED (mocked) | `PUT /api/profile` trims/validates full name, ignores email changes, and updates only the current user; `GET /api/profile` returns the current profile. `DELETE /api/account` removes user storage objects, deletes the profile (FK cascade), then deletes the Supabase auth user with the backend-only service role key; storage/auth failures return explicit messages describing any partial state. Settings page has read-only email, editable full name, log out, and typed `DELETE` confirmation; sidebar Settings link, not-found page, and `/dashboard` + `/study-planner` aliases added. `pytest -q` -> 184 passed in 53.17s; `tsc` exit 0; `npm run build` exit 0; no live calls; browser UI NOT VERIFIED |
+| Dashboard content (exams, tasks, materials, quiz scores) | UNIT-TESTED (mocked) | `GET /api/planner/dashboard` adds `upcoming_exams` (active, nearest first, `days_left`), `today_tasks` (all statuses), `recent_documents` (owner-scoped, last 5), and `recent_quizzes` with `quiz_title`/`quiz_id` (owner-scoped, last 5). Dashboard renders sections with a done checkbox using `useUpdateTask`, document status badges and links, quiz-result links, progress bar, loading skeletons, an error state with retry, and per-section empty states with links. Cross-user isolation covered in `test_planner.py` and `test_isolation.py`. `pytest -q` -> 190 passed in 57.59s; `tsc` exit 0; `npm run build` exit 0; browser UI NOT VERIFIED |
+| Dashboard weak topics | NOT IMPLEMENTED | TODO: quizzes have no topic field, so the weak-topics section is skipped rather than inventing data |
 | Migrations on a blank DB | NOT VERIFIED | — |
 | Tutor against real Gemini | LIVE-VERIFIED | `smoke_features.py`: "What is a component?" -> answer_length=187, citations=1 (`sample.pdf p1`); off-topic question -> `is_insufficient=True`, citations=0; follow-up -> answer_length=385, citations=1. |
 | Resolved tutor citations | UNIT-TESTED (mocked) | `tests/test_citations.py`: database resolves document name, page range, OCR/needs_review/user_edited flags; invalid/foreign chunk IDs dropped; API and history return citation objects, not chunk IDs. Browser UI NOT VERIFIED. |
