@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useNotes, useGenerateNote, useDeleteNote } from '@/hooks/use-notes'
+import { useDocuments } from '@/hooks/use-documents'
+import { useSubjects } from '@/hooks/use-subjects'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -34,17 +36,31 @@ export default function Notes({ subjectId }: NotesProps) {
   const generateNote = useGenerateNote()
   const deleteNote = useDeleteNote()
   const [generateOpen, setGenerateOpen] = useState(false)
+  const [selectedSubjectId, setSelectedSubjectId] = useState(subjectId ?? '')
+  const [selectedDocumentId, setSelectedDocumentId] = useState('')
+  const { data: subjects, isLoading: subjectsLoading } = useSubjects(generateOpen)
+  const { data: documents, isLoading: documentsLoading } = useDocuments(selectedSubjectId || undefined)
+  const readyDocuments = (documents ?? []).filter((document) => document.status === 'ready')
+  const hasNoSubjects = !subjectsLoading && (subjects?.length ?? 0) === 0
+  const hasNoReadyDocuments =
+    !!selectedSubjectId && !documentsLoading && readyDocuments.length === 0
   const [generateParams, setGenerateParams] = useState<{ note_type: NoteType; title: string }>({
     note_type: 'summary',
     title: 'Generated Note',
   })
 
   const handleGenerate = async () => {
-    const params: Record<string, string> = {
+    const params: {
+      subject_id?: string
+      document_id?: string
+      note_type: NoteType
+      title: string
+    } = {
       note_type: generateParams.note_type,
       title: generateParams.title,
     }
-    if (subjectId) params.subject_id = subjectId
+    if (selectedSubjectId) params.subject_id = selectedSubjectId
+    if (selectedDocumentId) params.document_id = selectedDocumentId
     await generateNote.mutateAsync(params)
     setGenerateOpen(false)
   }
@@ -141,6 +157,77 @@ export default function Notes({ subjectId }: NotesProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="note-subject">Subject</Label>
+              <Select
+                value={selectedSubjectId}
+                onValueChange={(value) => {
+                  setSelectedSubjectId(value ?? '')
+                  setSelectedDocumentId('')
+                }}
+                items={subjects?.map((subject) => ({ value: subject.id, label: subject.name }))}
+                disabled={generateNote.isPending}
+              >
+                <SelectTrigger id="note-subject" className="w-full" aria-required="true">
+                  <SelectValue placeholder={subjectsLoading ? 'Loading subjects...' : 'Select a subject'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects?.map((subject) => (
+                    <SelectItem key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasNoSubjects && (
+                <p className="text-sm text-muted-foreground">
+                  You need a subject first.{' '}
+                  <Link
+                    to="/subjects"
+                    className="underline underline-offset-4 hover:text-foreground"
+                    onClick={() => setGenerateOpen(false)}
+                  >
+                    Create a subject
+                  </Link>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="note-document">Document (optional)</Label>
+              <Select
+                value={selectedDocumentId || 'all'}
+                onValueChange={(value) => setSelectedDocumentId(value === 'all' ? '' : (value ?? ''))}
+                items={[
+                  { value: 'all', label: 'All ready documents in subject' },
+                  ...readyDocuments.map((document) => ({ value: document.id, label: document.name })),
+                ]}
+                disabled={generateNote.isPending || !selectedSubjectId || documentsLoading}
+              >
+                <SelectTrigger id="note-document" className="w-full">
+                  <SelectValue placeholder={documentsLoading ? 'Loading documents...' : 'All ready documents in subject'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All ready documents in subject</SelectItem>
+                  {readyDocuments.map((document) => (
+                    <SelectItem key={document.id} value={document.id}>
+                      {document.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasNoReadyDocuments && (
+                <p className="text-sm text-muted-foreground">
+                  No ready documents in this subject.{' '}
+                  <Link
+                    to={`/subjects/${selectedSubjectId}`}
+                    className="underline underline-offset-4 hover:text-foreground"
+                    onClick={() => setGenerateOpen(false)}
+                  >
+                    Upload or check documents
+                  </Link>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="note-type">Note Type</Label>
               <Select value={generateParams.note_type} onValueChange={(v) => setGenerateParams(p => ({ ...p, note_type: v as NoteType }))}>
                 <SelectTrigger id="note-type">
@@ -165,7 +252,7 @@ export default function Notes({ subjectId }: NotesProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setGenerateOpen(false)}>Cancel</Button>
-            <Button onClick={handleGenerate} disabled={generateNote.isPending}>
+            <Button onClick={handleGenerate} disabled={generateNote.isPending || !selectedSubjectId}>
               {generateNote.isPending ? 'Generating...' : 'Generate'}
             </Button>
           </DialogFooter>

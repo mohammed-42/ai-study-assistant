@@ -3,8 +3,11 @@
 ## Current state
 
 - **Phase:** 7 — Hardening. Code complete; live verification partial (Gemini daily quota blocks final planner rerun).
+- **Live verification:** tutor, notes, quizzes LIVE-VERIFIED; planner PARTIAL; full smoke stopped on Gemini 429 daily quota.
 - **Backend tests:** 160/160 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
+- **Latest commit:** `d93bb9c test: live feature checks, fixes`.
+- **Session:** Paused on 2026-10-26 after Gemini free-tier quota exhaustion; resume by rerunning `backend/scripts/smoke_features.py` after quota reset.
 - **Last updated:** 2026-10-26
 
 ---
@@ -29,7 +32,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 160 passed in 13.30s |
+| Backend suite | UNIT-TESTED (mocked) | `pytest -q` → 163 passed in 55.17s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
@@ -56,6 +59,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | End-to-end smoke test | PARTIAL | Batch 2 live smoke: PDF upload ready (3 pages, 2 chunks), tutor/notes/quizzes LIVE-VERIFIED, planner PARTIAL; cleanup rows/storage=0 and counts before=after in the tutor/notes/quizzes runs; one planner run left a chat session after a transient connection reset (manually cleaned). Final rerun stopped at tutor with Gemini daily quota 429 (20/day), so the full-script planner dashboard check was not repeated. Logs: `logs/step10_features_retry*.log`, `logs/server_step10.err.log`. |
 | Tailwind 3 compatibility | UNIT-TESTED (mocked) | No v4-only utility matches remain; `tailwindcss 3.4.10` build exit 0; CSS contains card spacing, 3px ring, 2px blur, `has-`/`data-` variants |
 | Upload dialog | NOT VERIFIED | New dialog supports one PDF or 2-20 images, reorder/remove, client validation, status polling, and privacy/OCR notices; `tsc`/build exit 0; browser UI not exercised |
+| Quiz + notes generate dialog | UNIT-TESTED (mocked) | Subject select is required; optional document select lists only that subject's READY documents; unset `subject_id`/`document_id` are omitted (never empty strings); backend 422 message asserted for both routes; valid `subject_id` passes with Gemini mocked; `tsc`/build exit 0; browser UI NOT VERIFIED |
 | Responsive page layout | NOT VERIFIED | Header/action rows stack below `sm`; long titles wrap; documents table scrolls horizontally; `tsc`/build exit 0; browser UI not exercised |
 | Migrations on a blank DB | NOT VERIFIED | — |
 | Tutor against real Gemini | LIVE-VERIFIED | `smoke_features.py`: "What is a component?" -> answer_length=187, citations=1 (`sample.pdf p1`); off-topic question -> `is_insufficient=True`, citations=0; follow-up -> answer_length=385, citations=1. |

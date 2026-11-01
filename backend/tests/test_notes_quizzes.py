@@ -129,6 +129,33 @@ class TestNotesCRUD:
         assert response.status_code == 404
 
 
+class TestNotesGenerate:
+    @pytest.mark.asyncio
+    async def test_generate_note_requires_subject_or_document(self, db_session, test_user, client):
+        response = client.post("/api/notes/generate", params={
+            "note_type": "summary",
+            "title": "Generated Note",
+        })
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Either document_id or subject_id must be provided"
+
+    @pytest.mark.asyncio
+    async def test_generate_note_with_subject_id_passes_validation(
+        self, db_session, test_user, client, test_subject, sample_document, sample_chunks
+    ):
+        with patch("app.services.notes.generate_notes", new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = "A summary of the subject."
+            response = client.post("/api/notes/generate", params={
+                "subject_id": str(test_subject.id),
+                "note_type": "summary",
+                "title": "Subject Note",
+            })
+        assert response.status_code == 201
+        data = response.json()
+        assert data["subject_id"] == str(test_subject.id)
+        assert data["title"] == "Subject Note"
+
+
 # ===================== QUIZZES TESTS =====================
 
 class TestQuizzesGenerate:
@@ -185,6 +212,31 @@ class TestQuizzesGenerate:
             "question_count": 3,
         })
         assert response.status_code == 422
+        assert response.json()["detail"] == "Either document_id or subject_id must be provided"
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_with_subject_id_passes_validation(
+        self, db_session, test_user, client, test_subject, sample_document, sample_chunks
+    ):
+        with patch("app.services.quizzes.generate_quiz") as mock_gen:
+            mock_gen.return_value = {"questions": [
+                {
+                    "question_text": "What is photosynthesis?",
+                    "question_type": "mcq",
+                    "options": ["A", "B", "C", "D"],
+                    "correct_option_index": 0,
+                    "explanation": "Photosynthesis.",
+                },
+            ]}
+            response = client.post("/api/quizzes/generate", json={
+                "subject_id": str(test_subject.id),
+                "title": "Subject Quiz",
+                "quiz_type": "mcq",
+                "difficulty": "medium",
+                "question_count": 1,
+            })
+        assert response.status_code == 201
+        assert response.json()["subject_id"] == str(test_subject.id)
 
 
 class TestQuizzesList:

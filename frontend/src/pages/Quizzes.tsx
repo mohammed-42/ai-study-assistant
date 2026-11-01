@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuizzes, useGenerateQuiz, useDeleteQuiz } from '@/hooks/use-quizzes'
+import { useDocuments } from '@/hooks/use-documents'
+import { useSubjects } from '@/hooks/use-subjects'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import type { QuizType, QuizDifficulty } from '@/types'
+import type { QuizType, QuizDifficulty, QuizGenerateRequest } from '@/types'
 
 interface QuizzesProps {
   subjectId?: string
@@ -45,6 +47,14 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
   const deleteQuiz = useDeleteQuiz()
   const [generateOpen, setGenerateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [selectedSubjectId, setSelectedSubjectId] = useState(subjectId ?? '')
+  const [selectedDocumentId, setSelectedDocumentId] = useState('')
+  const { data: subjects, isLoading: subjectsLoading } = useSubjects(generateOpen)
+  const { data: documents, isLoading: documentsLoading } = useDocuments(selectedSubjectId || undefined)
+  const readyDocuments = (documents ?? []).filter((document) => document.status === 'ready')
+  const hasNoSubjects = !subjectsLoading && (subjects?.length ?? 0) === 0
+  const hasNoReadyDocuments =
+    !!selectedSubjectId && !documentsLoading && readyDocuments.length === 0
   const [generateParams, setGenerateParams] = useState<{
     title: string
     quiz_type: QuizType
@@ -58,11 +68,10 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
   })
 
   const handleGenerate = async () => {
-    const params = {
-      ...generateParams,
-    } as Record<string, unknown>
-    if (subjectId) params.subject_id = subjectId
-    await generateQuiz.mutateAsync(params as any)
+    const params: QuizGenerateRequest = { ...generateParams }
+    if (selectedSubjectId) params.subject_id = selectedSubjectId
+    if (selectedDocumentId) params.document_id = selectedDocumentId
+    await generateQuiz.mutateAsync(params)
     setGenerateOpen(false)
   }
 
@@ -154,6 +163,77 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="quiz-subject">Subject</Label>
+              <Select
+                value={selectedSubjectId}
+                onValueChange={(value) => {
+                  setSelectedSubjectId(value ?? '')
+                  setSelectedDocumentId('')
+                }}
+                items={subjects?.map((subject) => ({ value: subject.id, label: subject.name }))}
+                disabled={generateQuiz.isPending}
+              >
+                <SelectTrigger id="quiz-subject" className="w-full" aria-required="true">
+                  <SelectValue placeholder={subjectsLoading ? 'Loading subjects...' : 'Select a subject'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects?.map((subject) => (
+                    <SelectItem key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasNoSubjects && (
+                <p className="text-sm text-muted-foreground">
+                  You need a subject first.{' '}
+                  <Link
+                    to="/subjects"
+                    className="underline underline-offset-4 hover:text-foreground"
+                    onClick={() => setGenerateOpen(false)}
+                  >
+                    Create a subject
+                  </Link>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quiz-document">Document (optional)</Label>
+              <Select
+                value={selectedDocumentId || 'all'}
+                onValueChange={(value) => setSelectedDocumentId(value === 'all' ? '' : (value ?? ''))}
+                items={[
+                  { value: 'all', label: 'All ready documents in subject' },
+                  ...readyDocuments.map((document) => ({ value: document.id, label: document.name })),
+                ]}
+                disabled={generateQuiz.isPending || !selectedSubjectId || documentsLoading}
+              >
+                <SelectTrigger id="quiz-document" className="w-full">
+                  <SelectValue placeholder={documentsLoading ? 'Loading documents...' : 'All ready documents in subject'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All ready documents in subject</SelectItem>
+                  {readyDocuments.map((document) => (
+                    <SelectItem key={document.id} value={document.id}>
+                      {document.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasNoReadyDocuments && (
+                <p className="text-sm text-muted-foreground">
+                  No ready documents in this subject.{' '}
+                  <Link
+                    to={`/subjects/${selectedSubjectId}`}
+                    className="underline underline-offset-4 hover:text-foreground"
+                    onClick={() => setGenerateOpen(false)}
+                  >
+                    Upload or check documents
+                  </Link>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="quiz-title">Title</Label>
               <Input id="quiz-title" value={generateParams.title} onChange={(e) => setGenerateParams(p => ({ ...p, title: e.target.value }))} />
             </div>
@@ -190,7 +270,7 @@ export default function Quizzes({ subjectId }: QuizzesProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setGenerateOpen(false)}>Cancel</Button>
-            <Button onClick={handleGenerate} disabled={generateQuiz.isPending}>
+            <Button onClick={handleGenerate} disabled={generateQuiz.isPending || !selectedSubjectId}>
               {generateQuiz.isPending ? 'Generating...' : 'Generate'}
             </Button>
           </DialogFooter>
