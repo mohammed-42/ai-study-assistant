@@ -57,5 +57,8 @@ def reset_db_for_testing(test_engine):
     """Replace engine/session maker with test-specific ones."""
     global _engine, _session_maker
     _engine = test_engine
+    if test_engine is None:
+        _session_maker = None
+        return
     TestSession = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     _session_maker = TestSession

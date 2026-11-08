@@ -50,11 +50,16 @@ class Settings(BaseSettings):
     # App
     APP_NAME: str = "AI Study Assistant"
     ENVIRONMENT: str = "development"
+    DEBUG: bool = False
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() in {"production", "prod"}
 
     @model_validator(mode="after")
     def validate_chunk_settings(self):
@@ -74,21 +79,54 @@ class Settings(BaseSettings):
         validate_on_init = False
 
 
-def validate_runtime_config(s: Settings | None = None) -> list[str]:
-    """Return missing required settings; fail fast in production."""
-    cfg = s or get_settings_instance()
-    missing: list[str] = []
-    if not cfg.SUPABASE_URL:
-        missing.append("SUPABASE_URL")
-    if not cfg.SUPABASE_SERVICE_ROLE_KEY:
-        missing.append("SUPABASE_SERVICE_ROLE_KEY")
-    if not cfg.GEMINI_API_KEY:
-        missing.append("GEMINI_API_KEY")
+PRODUCTION_REQUIRED_SETTINGS = (
+    "DATABASE_URL",
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_JWKS_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "GEMINI_API_KEY",
+    "ALLOWED_ORIGINS",
+)
 
-    if cfg.ENVIRONMENT.lower() in {"production", "prod"} and missing:
-        raise RuntimeError(
-            "Missing required production configuration: " + ", ".join(missing)
-        )
+DEVELOPMENT_WARN_SETTINGS = (
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "GEMINI_API_KEY",
+)
+
+
+def validate_runtime_config(s: Settings | None = None) -> list[str]:
+    """Validate settings at startup; fail fast in production."""
+    cfg = s or get_settings_instance()
+
+    if cfg.is_production:
+        missing = [
+            name
+            for name in PRODUCTION_REQUIRED_SETTINGS
+            if not str(getattr(cfg, name)).strip()
+        ]
+        if missing:
+            raise RuntimeError(
+                "Missing required production configuration: " + ", ".join(missing)
+            )
+
+        origins = cfg.allowed_origins_list
+        if not origins:
+            raise RuntimeError(
+                "ALLOWED_ORIGINS must list explicit origins in production"
+            )
+        if "*" in origins:
+            raise RuntimeError(
+                "ALLOWED_ORIGINS must not contain a wildcard origin in production"
+            )
+        if cfg.DEBUG:
+            raise RuntimeError("DEBUG must be false in production")
+        return []
+
+    missing = [
+        name for name in DEVELOPMENT_WARN_SETTINGS if not getattr(cfg, name)
+    ]
     for name in missing:
         logger.warning("%s is not set; related features will be unavailable", name)
     return missing

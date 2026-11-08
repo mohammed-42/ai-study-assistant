@@ -4,11 +4,11 @@
 
 - **Phase:** 7 — Hardening. Code complete; targeted live tutor/dashboard verification complete.
 - **Live verification:** tutor citations, notes, quizzes, and planner dashboard LIVE-VERIFIED; full `smoke_features.py` rerun not repeated.
-- **Backend tests:** 195/195 passing (mocked/hermetic).
+- **Backend tests:** 202/202 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** `feat: smaller page-aware chunks for precise citations`.
+- **Latest commit:** `chore: production config, Dockerfile, deployment docs`.
 - **Session:** 2026-11-01 page-aware chunking added; existing documents keep old chunks until retried.
-- **Last updated:** 2026-11-01
+- **Last updated:** 2026-11-08
 
 ---
 
@@ -34,6 +34,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 |------|--------|----------|
 | Backend suite | UNIT-TESTED (mocked) | `pytest -q` -> 195 passed in 54.55s |
 | Frontend typecheck + build | UNIT-TESTED (mocked) | `tsc` exit 0; `npm run build` exit 0 |
+| Production config + deployment | UNIT-TESTED (mocked) | With `ENVIRONMENT=production`, startup validation fails fast on missing required settings, empty/wildcard `ALLOWED_ORIGINS`, or `DEBUG=true`; API docs/redoc/openapi disabled and CORS origins come only from `ALLOWED_ORIGINS`. `/api/health` runs `SELECT 1` and returns 503 `{"status":"unavailable"}` without leaking details. Added `backend/Dockerfile` (python:3.12-slim, non-root, uvicorn on `$PORT`, `/api/health` healthcheck) and `.dockerignore` excluding env/logs/samples/tests; frontend reads all config from `import.meta.env` and `vercel.json` adds the SPA fallback; README has a Deployment section (Render/Fly, Vercel, Supabase Site/Redirect URLs, free-host sleep). Tests: `test_config.py` production cases, `test_health.py` 503 + no leak; `pytest -q` -> 202 passed in 35.25s; `tsc` exit 0; `npm run build` exit 0; no live calls; browser UI NOT VERIFIED |
 | Git-history secret scan | LIVE-VERIFIED | Only `.env.example` files tracked; no `AIza`, `sb_secret_`, or `eyJ` in history; no rotation needed |
 | README + upload notices | UNIT-TESTED (mocked) | README setup/run/test/limitations; Documents page shows OCR accuracy and Gemini privacy notices in a `role="note"` block; browser UI NOT VERIFIED |
 | Rate limits (upload, AI, re-embed) | UNIT-TESTED (mocked) | `tests/test_rate_limit.py`; process-local |

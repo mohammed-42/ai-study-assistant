@@ -88,6 +88,48 @@ venv/Scripts/python scripts/smoke_test.py              # PDF path
 venv/Scripts/python scripts/smoke_test.py --handwriting # handwriting OCR path
 ```
 
+## Deployment
+
+The backend is host-agnostic and ships as a Docker image (`backend/Dockerfile`); the
+frontend is a static Vite build. Set `ENVIRONMENT=production` on the backend so startup
+validation fails fast on missing config, wildcard CORS, `DEBUG=true`, and disables API docs.
+Run `alembic upgrade head` against the production database before serving traffic.
+
+### Backend (Render or Fly.io)
+
+- Render: create a Web Service from this repo with Root Directory `backend`, Runtime
+  `Docker`, Dockerfile path `Dockerfile`, and health check path `/api/health`. Use a
+  pre-deploy command to run migrations.
+- Fly.io: `cd backend && fly launch` (or `fly deploy`) to build the same Dockerfile; set the
+  health check to `/api/health`.
+- The container listens on `$PORT`, runs as a non-root user, and health-checks `/api/health`.
+- Backend environment variable names: `DATABASE_URL`, `DATABASE_URL_SYNC`, `SUPABASE_URL`,
+  `SUPABASE_ANON_KEY`, `SUPABASE_JWKS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`,
+  `GEMINI_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `CHUNK_TARGET_TOKENS`,
+  `CHUNK_OVERLAP_TOKENS`, `STORAGE_BUCKET`, `OCR_LIMIT_PAGES_PER_DOC`,
+  `OCR_LIMIT_PAGES_PER_USER_PER_DAY`, `ALLOWED_ORIGINS`, `ENVIRONMENT`, `DEBUG`, `APP_NAME`.
+
+### Frontend (Vercel)
+
+- Import the repo, set Root Directory `frontend`, framework Vite, build command
+  `npm run build`, output directory `dist`. `vercel.json` provides the SPA fallback to
+  `index.html`.
+- Frontend environment variable names (build time): `VITE_API_URL`, `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_ANON_KEY`. They are read only via `import.meta.env` at build time; no
+  values are hardcoded.
+
+### Supabase auth URLs
+
+In Supabase Authentication > URL Configuration set the Site URL to the deployed frontend
+URL and add the deployed frontend URL (and any preview URLs you use) to Redirect URLs.
+Also add the deployed backend origin to `ALLOWED_ORIGINS`.
+
+### Free-tier note
+
+Free hosts (Render free web services, Fly machines that auto-stop) sleep when idle. The
+first request after a period of inactivity can take tens of seconds while the instance
+wakes.
+
 ## Known limitations
 
 - OCR is not 100% accurate, especially for handwriting. Review the extracted text after upload.
