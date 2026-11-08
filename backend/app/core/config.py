@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # Gemini
     GEMINI_API_KEY: str = ""
+    GEMINI_API_KEYS: str = ""
     GEMINI_MODEL: str = "gemini-3.6-flash"
     GEMINI_TIMEOUT_SECONDS: int = 60
     GEMINI_MAX_RETRIES: int = 2
@@ -58,6 +59,17 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     @property
+    def gemini_api_keys(self) -> list[str]:
+        """Configured Gemini keys, in order; never log these values."""
+        raw = self.GEMINI_API_KEYS.strip()
+        if raw:
+            keys = [k.strip() for k in raw.split(",") if k.strip()]
+        else:
+            raw = self.GEMINI_API_KEY.strip()
+            keys = [raw] if raw else []
+        return [k for k in keys if k != "your-gemini-api-key"]
+
+    @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT.strip().lower() in {"production", "prod"}
 
@@ -85,14 +97,12 @@ PRODUCTION_REQUIRED_SETTINGS = (
     "SUPABASE_ANON_KEY",
     "SUPABASE_JWKS_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
-    "GEMINI_API_KEY",
     "ALLOWED_ORIGINS",
 )
 
 DEVELOPMENT_WARN_SETTINGS = (
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
-    "GEMINI_API_KEY",
 )
 
 
@@ -106,6 +116,8 @@ def validate_runtime_config(s: Settings | None = None) -> list[str]:
             for name in PRODUCTION_REQUIRED_SETTINGS
             if not str(getattr(cfg, name)).strip()
         ]
+        if not cfg.gemini_api_keys:
+            missing.append("GEMINI_API_KEY")
         if missing:
             raise RuntimeError(
                 "Missing required production configuration: " + ", ".join(missing)
@@ -127,6 +139,8 @@ def validate_runtime_config(s: Settings | None = None) -> list[str]:
     missing = [
         name for name in DEVELOPMENT_WARN_SETTINGS if not getattr(cfg, name)
     ]
+    if not cfg.gemini_api_keys:
+        missing.append("GEMINI_API_KEY")
     for name in missing:
         logger.warning("%s is not set; related features will be unavailable", name)
     return missing

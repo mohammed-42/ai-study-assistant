@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.ai.gemini import create_client, generate_text
+from app.ai.gemini import generate_text, require_api_keys
 from app.core.config import settings
 from app.models.document_chunk import DocumentChunk
 
@@ -70,11 +70,7 @@ async def generate_notes(
     Returns:
         Generated note content as a string
     """
-    api_key = settings.GEMINI_API_KEY
-    if not api_key or api_key == "your-gemini-api-key":
-        raise RuntimeError("GEMINI_API_KEY is not configured")
-
-    client = create_client(api_key)
+    require_api_keys()
 
     if not chunks:
         return f"No materials available to generate {note_type} notes."
@@ -89,7 +85,6 @@ async def generate_notes(
 
     try:
         response = await generate_text(
-            client,
             prompt,
             model=settings.GEMINI_MODEL,
             temperature=0.2,

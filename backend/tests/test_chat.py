@@ -289,7 +289,7 @@ async def test_answer_generation_with_retrieval(db_session, test_user, test_subj
         "evidence_sufficient": True,
     }
 
-    with patch('app.rag.generator.create_client') as mock_create, \
+    with patch('app.ai.gemini.create_client') as mock_create, \
          patch('app.rag.retriever.retrieve_chunks') as mock_retrieve, \
          patch('app.ai.gemini.GeminiOcrProvider') as mock_provider_cls:
         
@@ -358,6 +358,7 @@ async def test_generate_answer_without_chunks_returns_message():
 @pytest.mark.asyncio
 async def test_generate_answer_propagates_quota_error():
     """Quota errors must reach the API layer instead of becoming empty answers."""
+    from app.ai.ocr import OcrQuotaError
     from app.core.resilience import ExternalCallError
     from app.rag.generator import generate_answer
     from app.rag.retriever import RetrievalResult
@@ -373,11 +374,11 @@ async def test_generate_answer_propagates_quota_error():
     )
     quota_error = ExternalCallError("External service call failed: 429 quota exceeded")
 
-    with patch("app.rag.generator.create_client"), patch(
+    with patch("app.ai.gemini.create_client"), patch(
         "app.ai.gemini.call_with_retry",
         new=AsyncMock(side_effect=quota_error),
     ):
-        with pytest.raises(ExternalCallError):
+        with pytest.raises(OcrQuotaError):
             await generate_answer("What is a component?", [chunk])
 
 

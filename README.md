@@ -22,7 +22,7 @@ PostgreSQL + pgvector; Supabase Auth/Storage; Google Gemini for OCR, embeddings 
    from `frontend/.env.example`. Fill the values locally; never commit them.
    - Backend names: `DATABASE_URL`, `DATABASE_URL_SYNC`, `SUPABASE_URL`,
      `SUPABASE_ANON_KEY`, `SUPABASE_JWKS_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-     `GEMINI_API_KEY`, `GEMINI_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`,
+     `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `GEMINI_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`,
      `CHUNK_TARGET_TOKENS`, `CHUNK_OVERLAP_TOKENS`, `STORAGE_BUCKET`,
      `OCR_LIMIT_PAGES_PER_DOC`, `OCR_LIMIT_PAGES_PER_USER_PER_DAY`,
      `ALLOWED_ORIGINS`.
@@ -129,7 +129,7 @@ Run `alembic upgrade head` against the production database before serving traffi
 - The container listens on `$PORT`, runs as a non-root user, and health-checks `/api/health`.
 - Backend environment variable names: `DATABASE_URL`, `DATABASE_URL_SYNC`, `SUPABASE_URL`,
   `SUPABASE_ANON_KEY`, `SUPABASE_JWKS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`,
-  `GEMINI_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `CHUNK_TARGET_TOKENS`,
+  `GEMINI_API_KEYS`, `GEMINI_MODEL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `CHUNK_TARGET_TOKENS`,
   `CHUNK_OVERLAP_TOKENS`, `STORAGE_BUCKET`, `OCR_LIMIT_PAGES_PER_DOC`,
   `OCR_LIMIT_PAGES_PER_USER_PER_DAY`, `ALLOWED_ORIGINS`, `ENVIRONMENT`, `DEBUG`, `APP_NAME`.
 

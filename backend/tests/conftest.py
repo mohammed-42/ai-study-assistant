@@ -20,6 +20,15 @@ from app.models.document_chunk import DocumentChunk  # noqa: E402
 from app.models.processing_job import ProcessingJob  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _reset_gemini_rotation_state():
+    from app.ai import gemini
+
+    gemini.reset_rotation_state()
+    yield
+    gemini.reset_rotation_state()
+
+
 @pytest.fixture
 async def db_session():
     """Fresh in-memory DB per test."""

@@ -207,7 +207,7 @@ async def test_generate_answer_drops_citation_not_in_retrieved_set():
         "evidence_sufficient": True,
     })
 
-    with patch("app.rag.generator.create_client"), patch(
+    with patch("app.ai.gemini.create_client"), patch(
         "app.ai.gemini.call_with_retry",
         new=AsyncMock(return_value=response),
     ):

@@ -9,7 +9,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.ai.gemini import classify_gemini_error, create_client, generate_text
+from app.ai.gemini import (
+    classify_gemini_error,
+    generate_text,
+    require_api_keys,
+)
 from app.ai.ocr import OcrQuotaError
 from app.core.config import settings
 from app.rag.retriever import RetrievalResult
@@ -87,11 +91,7 @@ async def generate_answer(
     Returns:
         AnswerResult with answer, validated citations, and insufficiency flag
     """
-    api_key = settings.GEMINI_API_KEY
-    if not api_key or api_key == "your-gemini-api-key":
-        raise RuntimeError("GEMINI_API_KEY is not configured")
-    
-    client = create_client(api_key)
+    require_api_keys()
     
     # Build reference text
     if not retrieved_chunks:
@@ -125,7 +125,6 @@ async def generate_answer(
     
     try:
         response = await generate_text(
-            client,
             prompt,
             model=settings.GEMINI_MODEL,
             temperature=0.1,
@@ -192,9 +191,9 @@ async def generate_answer(
 
 def _get_ocr_provider():
     """Get the OCR provider (also handles embedding)."""
-    from app.ai.gemini import GeminiOcrProvider
-    api_key = settings.GEMINI_API_KEY
-    if api_key and api_key != "your-gemini-api-key":
+    from app.ai.gemini import GeminiOcrProvider, configured_api_keys
+
+    if configured_api_keys():
         try:
             return GeminiOcrProvider()
         except Exception as exc:

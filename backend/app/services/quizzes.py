@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.ai.gemini import create_client, generate_text
+from app.ai.gemini import generate_text, require_api_keys
 from app.core.config import settings
 from app.models.document_chunk import DocumentChunk
 
@@ -128,11 +128,7 @@ async def generate_quiz(
     Returns:
         Dict with 'questions' list and metadata
     """
-    api_key = settings.GEMINI_API_KEY
-    if not api_key or api_key == "your-gemini-api-key":
-        raise RuntimeError("GEMINI_API_KEY is not configured")
-
-    client = create_client(api_key)
+    require_api_keys()
 
     if not chunks:
         raise ValueError("No document chunks available to generate quiz questions")
@@ -150,7 +146,6 @@ async def generate_quiz(
 
     try:
         response = await generate_text(
-            client,
             full_prompt,
             model=settings.GEMINI_MODEL,
             temperature=0.3,

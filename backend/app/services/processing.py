@@ -435,10 +435,10 @@ async def _check_daily_ocr_limit(db: AsyncSession, owner_id: uuid.UUID, pages_to
 
 def _get_ocr_provider() -> OcrProvider | None:
     """Return the configured OCR provider, or None if not configured."""
-    api_key = settings.GEMINI_API_KEY
-    if api_key and api_key != "your-gemini-api-key":
+    from app.ai.gemini import GeminiOcrProvider, configured_api_keys
+
+    if configured_api_keys():
         try:
-            from app.ai.gemini import GeminiOcrProvider
             return GeminiOcrProvider()
         except Exception as exc:
             logger.warning("Failed to init Gemini provider: %s", exc)

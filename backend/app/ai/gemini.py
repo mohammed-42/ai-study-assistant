@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime, time as dt_time, timedelta, timezone
+from typing import Any, Awaitable, Callable, TypeVar
+from zoneinfo import ZoneInfo
 
 from google import genai
 from google.genai import errors, types
@@ -33,6 +37,183 @@ Transcribe the following image exactly as written. Follow these rules:
 - Do not add any commentary, summary, or interpretation — output ONLY the transcription.
 - If the image contains no readable text, output: [NO_TEXT]
 """
+
+QUOTA_MINUTE_COOLDOWN_SECONDS = 60.0
+QUOTA_UNKNOWN_COOLDOWN_SECONDS = 300.0
+BUSY_COOLDOWN_SECONDS = 30.0
+PACIFIC = "America/Los_Angeles"
+
+_monotonic = time.monotonic
+_clients: dict[str, genai.Client] = {}
+_cooldowns: dict[tuple[int, str], float] = {}
+_state_lock = threading.Lock()
+
+T = TypeVar("T")
+
+
+def reset_rotation_state() -> None:
+    """Clear cached clients and cooldowns (tests and process restarts)."""
+    with _state_lock:
+        _clients.clear()
+        _cooldowns.clear()
+
+
+def configured_api_keys() -> list[str]:
+    """Return keys in configured order without ever logging their values."""
+    raw = getattr(settings, "GEMINI_API_KEYS", "")
+    raw = raw.strip() if isinstance(raw, str) else ""
+    if raw:
+        keys = [key.strip() for key in raw.split(",") if key.strip()]
+    else:
+        single = getattr(settings, "GEMINI_API_KEY", "")
+        single = single.strip() if isinstance(single, str) else ""
+        keys = [single] if single else []
+    return [key for key in keys if key != "your-gemini-api-key"]
+
+
+def require_api_keys() -> list[str]:
+    keys = configured_api_keys()
+    if not keys:
+        raise RuntimeError(
+            "GEMINI_API_KEY is not configured. "
+            "Set it in your .env file to use the Gemini provider."
+        )
+    return keys
+
+
+def _get_client(api_key: str) -> genai.Client:
+    with _state_lock:
+        client = _clients.get(api_key)
+        if client is None:
+            client = create_client(api_key)
+            _clients[api_key] = client
+        return client
+
+
+def _set_cooldown(key_index: int, model: str, until: float) -> None:
+    with _state_lock:
+        _cooldowns[(key_index, model)] = until
+
+
+def _is_cooling(key_index: int, model: str, now: float) -> bool:
+    with _state_lock:
+        return _cooldowns.get((key_index, model), 0.0) > now
+
+
+def _exception_chain(exc: BaseException | None):
+    current = exc
+    while current is not None:
+        yield current
+        current = current.__cause__
+
+
+def _error_text(exc: BaseException | None) -> str:
+    parts: list[str] = []
+    for item in _exception_chain(exc):
+        parts.append(str(item))
+        details = getattr(item, "details", None)
+        if details:
+            parts.append(str(details))
+    return " ".join(parts).lower()
+
+
+def _is_quota_error(exc: BaseException) -> bool:
+    for item in _exception_chain(exc):
+        if isinstance(item, errors.APIError):
+            status = str(getattr(item, "status", "") or "").upper()
+            if getattr(item, "code", None) == 429 or status == "RESOURCE_EXHAUSTED":
+                return True
+    text = _error_text(exc)
+    return any(
+        marker in text
+        for marker in (
+            "429",
+            "resourceexhausted",
+            "rate limit",
+            "rate_limit",
+            "too many requests",
+            "quota exceeded",
+        )
+    )
+
+
+def _is_timeout_error(exc: BaseException) -> bool:
+    for item in _exception_chain(exc):
+        if isinstance(item, TimeoutError):
+            return True
+    text = _error_text(exc)
+    return "timeout" in text or "timed out" in text
+
+
+def _is_server_error(exc: BaseException) -> bool:
+    for item in _exception_chain(exc):
+        if isinstance(item, errors.ServerError):
+            return True
+        if isinstance(item, errors.APIError):
+            code = getattr(item, "code", None)
+            if isinstance(code, int) and 500 <= code < 600:
+                return True
+    return False
+
+
+def _seconds_until_pacific_midnight() -> float:
+    try:
+        tz = ZoneInfo(PACIFIC)
+    except Exception:
+        tz = timezone(timedelta(hours=-8))
+    now = datetime.now(tz)
+    midnight = datetime.combine(now.date() + timedelta(days=1), dt_time.min, tzinfo=tz)
+    return max(0.0, (midnight - now).total_seconds())
+
+
+def _quota_cooldown_until(exc: BaseException) -> float:
+    text = _error_text(exc)
+    now = _monotonic()
+    if any(
+        marker in text
+        for marker in ("per day", "per_day", "perday", "daily", "rpd")
+    ):
+        return now + _seconds_until_pacific_midnight()
+    if any(
+        marker in text
+        for marker in ("per minute", "per_minute", "perminute", "rpm")
+    ):
+        return now + QUOTA_MINUTE_COOLDOWN_SECONDS
+    return now + QUOTA_UNKNOWN_COOLDOWN_SECONDS
+
+
+async def _call_with_key_rotation(
+    model: str,
+    request: Callable[[genai.Client], Awaitable[T]],
+) -> T:
+    keys = require_api_keys()
+    now = _monotonic()
+    available = [
+        (index, key)
+        for index, key in enumerate(keys)
+        if not _is_cooling(index, model, now)
+    ]
+    if not available:
+        raise OcrQuotaError()
+
+    last_exc: BaseException | None = None
+    for index, api_key in available:
+        client = _get_client(api_key)
+        try:
+            return await request(client)
+        except Exception as exc:
+            last_exc = exc
+            if _is_quota_error(exc):
+                _set_cooldown(index, model, _quota_cooldown_until(exc))
+                continue
+            if _is_timeout_error(exc) or _is_server_error(exc):
+                _set_cooldown(
+                    index, model, _monotonic() + BUSY_COOLDOWN_SECONDS
+                )
+                continue
+            raise classify_gemini_error(exc) from exc
+
+    raise OcrQuotaError() from last_exc
 
 
 def create_client(api_key: str) -> genai.Client:
@@ -90,7 +271,6 @@ def _finish_reason_name(response: Any) -> str | None:
 
 
 async def generate_text(
-    client: genai.Client,
     contents: Any,
     *,
     model: str,
@@ -98,20 +278,24 @@ async def generate_text(
     response_mime_type: str | None = None,
     max_output_tokens: int | None = None,
 ) -> GeminiTextResult:
-    """Call generate_content with the shared timeout/retry wrapper."""
+    """Call generate_content, rotating keys on quota/timeout/5xx."""
     config = types.GenerateContentConfig(
         temperature=temperature,
         response_mime_type=response_mime_type,
         max_output_tokens=max_output_tokens,
     )
-    response = await call_with_retry(
-        client.models.generate_content,
-        model=model,
-        contents=contents,
-        config=config,
-        timeout=settings.GEMINI_TIMEOUT_SECONDS,
-        retries=settings.GEMINI_MAX_RETRIES,
-    )
+
+    async def request(client: genai.Client):
+        return await call_with_retry(
+            client.models.generate_content,
+            model=model,
+            contents=contents,
+            config=config,
+            timeout=settings.GEMINI_TIMEOUT_SECONDS,
+            retries=0,
+        )
+
+    response = await _call_with_key_rotation(model, request)
     try:
         raw_text = response.text
     except Exception:
@@ -123,23 +307,27 @@ async def generate_text(
 
 
 async def embed_text(
-    client: genai.Client,
     text: str,
     *,
     model: str,
     output_dimensionality: int = 768,
 ) -> list[float]:
-    """Embed one text, rejecting missing or all-zero vectors."""
-    response = await call_with_retry(
-        client.models.embed_content,
-        model=model,
-        contents=text,
-        config=types.EmbedContentConfig(
-            output_dimensionality=output_dimensionality
-        ),
-        timeout=settings.GEMINI_TIMEOUT_SECONDS,
-        retries=settings.GEMINI_MAX_RETRIES,
+    """Embed one text, rotating keys, and reject missing/all-zero vectors."""
+    config = types.EmbedContentConfig(
+        output_dimensionality=output_dimensionality
     )
+
+    async def request(client: genai.Client):
+        return await call_with_retry(
+            client.models.embed_content,
+            model=model,
+            contents=text,
+            config=config,
+            timeout=settings.GEMINI_TIMEOUT_SECONDS,
+            retries=0,
+        )
+
+    response = await _call_with_key_rotation(model, request)
     embeddings = getattr(response, "embeddings", None)
     if not embeddings:
         raise RuntimeError("Embedding response did not contain a vector")
@@ -165,13 +353,11 @@ class GeminiOcrProvider(OcrProvider):
     EMBEDDING_MODEL = settings.EMBEDDING_MODEL
 
     def __init__(self) -> None:
-        api_key = settings.GEMINI_API_KEY
-        if not api_key or api_key == "your-gemini-api-key":
+        if not configured_api_keys():
             raise RuntimeError(
                 "GEMINI_API_KEY is not configured. "
                 "Set it in your .env file to use the Gemini OCR provider."
             )
-        self._client = create_client(api_key)
         self._model_name = settings.GEMINI_MODEL
 
     @property
@@ -190,7 +376,6 @@ class GeminiOcrProvider(OcrProvider):
             part = types.Part(inline_data=blob)
 
             result = await generate_text(
-                self._client,
                 [_TRANSCRIBE_PROMPT, part],
                 model=self._model_name,
                 temperature=0.0,
@@ -241,7 +426,6 @@ class GeminiOcrProvider(OcrProvider):
                 raise ValueError("Cannot embed empty text")
             try:
                 embedding = await embed_text(
-                    self._client,
                     text,
                     model=model_name,
                     output_dimensionality=dim,
