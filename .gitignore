@@ -48,6 +48,11 @@ Thumbs.db
 logs/
 backend/logs/
 
+# Playwright
+frontend/e2e/screenshots/
+frontend/test-results/
+frontend/playwright-report/
+
 # Docker
 docker-compose.override.yml
 

@@ -77,6 +77,30 @@ npx tsc -p tsconfig.json --noEmit --incremental false
 npm run build
 ```
 
+## End-to-end browser tests
+
+Playwright (Chromium only) drives the real UI against the live backend and Supabase. The
+config does **not** start servers: start the backend on `http://localhost:8000` and the
+frontend on `http://localhost:5173` first. The global setup stops immediately with a clear
+error if either server is unreachable.
+
+```bash
+cd frontend
+npx playwright install chromium   # one time
+npm run e2e
+```
+
+- Each run creates throwaway users through the Supabase admin API with unique emails. The
+  service-role key is read from `backend/.env` in Node test setup only; it is never sent to
+  the browser or logged. Teardown deletes each user and its data. The smoke-test account is
+  never used.
+- No Gemini calls: the suite does not upload processing documents and never generates tutor
+  answers, notes, or quizzes.
+- Every test fails on console errors or unexpected failed network requests. Intentional
+  error-response tests allow their own 4xx/5xx console messages, and React development-only
+  `Warning:` messages are ignored.
+- Full-page screenshots are written to `frontend/e2e/screenshots/` (gitignored).
+
 ## Live smoke test
 
 Start the backend, then run the smoke script with the live settings in `backend/.env.smoke`
