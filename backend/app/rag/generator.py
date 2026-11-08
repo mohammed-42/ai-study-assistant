@@ -7,12 +7,11 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import google.generativeai as genai
 from pydantic import BaseModel, Field
 
-from app.ai.ocr import OcrQuotaError, classify_ocr_provider_error
+from app.ai.gemini import classify_gemini_error, create_client, generate_text
+from app.ai.ocr import OcrQuotaError
 from app.core.config import settings
-from app.core.resilience import call_with_retry
 from app.rag.retriever import RetrievalResult
 
 logger = logging.getLogger(__name__)
@@ -92,8 +91,7 @@ async def generate_answer(
     if not api_key or api_key == "your-gemini-api-key":
         raise RuntimeError("GEMINI_API_KEY is not configured")
     
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(settings.GEMINI_MODEL)
+    client = create_client(api_key)
     
     # Build reference text
     if not retrieved_chunks:
@@ -126,15 +124,15 @@ async def generate_answer(
     ) + history_context
     
     try:
-        response = await call_with_retry(
-            model.generate_content,
+        response = await generate_text(
+            client,
             prompt,
-            generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
-            timeout=settings.GEMINI_TIMEOUT_SECONDS,
-            retries=settings.GEMINI_MAX_RETRIES,
+            model=settings.GEMINI_MODEL,
+            temperature=0.1,
+            response_mime_type="application/json",
         )
         
-        text = response.text.strip()
+        text = response.text
         
         # Try to parse as JSON
         try:
@@ -182,7 +180,7 @@ async def generate_answer(
     
     except Exception as exc:
         logger.error("Answer generation failed: %s", exc)
-        if isinstance(classify_ocr_provider_error(exc), OcrQuotaError):
+        if isinstance(classify_gemini_error(exc), OcrQuotaError):
             raise
         return AnswerResult(
             answer="",

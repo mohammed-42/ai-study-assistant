@@ -7,10 +7,8 @@ import logging
 from dataclasses import dataclass
 from uuid import UUID
 
-import google.generativeai as genai
-
+from app.ai.gemini import create_client, generate_text
 from app.core.config import settings
-from app.core.resilience import call_with_retry
 from app.models.document_chunk import DocumentChunk
 
 logger = logging.getLogger(__name__)
@@ -76,8 +74,7 @@ async def generate_notes(
     if not api_key or api_key == "your-gemini-api-key":
         raise RuntimeError("GEMINI_API_KEY is not configured")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(settings.GEMINI_MODEL)
+    client = create_client(api_key)
 
     if not chunks:
         return f"No materials available to generate {note_type} notes."
@@ -91,15 +88,15 @@ async def generate_notes(
     prompt = prompt_template.format(references="\n---\n".join(references))
 
     try:
-        response = await call_with_retry(
-            model.generate_content,
+        response = await generate_text(
+            client,
             prompt,
-            generation_config={"temperature": 0.2, "response_mime_type": "application/json"},
-            timeout=settings.GEMINI_TIMEOUT_SECONDS,
-            retries=settings.GEMINI_MAX_RETRIES,
+            model=settings.GEMINI_MODEL,
+            temperature=0.2,
+            response_mime_type="application/json",
         )
 
-        text = response.text.strip()
+        text = response.text
         try:
             data = json.loads(text)
         except json.JSONDecodeError:

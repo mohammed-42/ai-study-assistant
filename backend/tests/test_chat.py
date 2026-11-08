@@ -289,7 +289,7 @@ async def test_answer_generation_with_retrieval(db_session, test_user, test_subj
         "evidence_sufficient": True,
     }
 
-    with patch('app.rag.generator.genai') as mock_genai, \
+    with patch('app.rag.generator.create_client') as mock_create, \
          patch('app.rag.retriever.retrieve_chunks') as mock_retrieve, \
          patch('app.ai.gemini.GeminiOcrProvider') as mock_provider_cls:
         
@@ -312,11 +312,12 @@ async def test_answer_generation_with_retrieval(db_session, test_user, test_subj
         ]
         
         # Setup mock generator
-        mock_model = MagicMock()
         mock_response = MagicMock()
         mock_response.text = json.dumps(mock_answer)
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_response.candidates = [MagicMock(finish_reason=None)]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_create.return_value = mock_client
 
         # Post message
         response = client.post(
@@ -372,11 +373,10 @@ async def test_generate_answer_propagates_quota_error():
     )
     quota_error = ExternalCallError("External service call failed: 429 quota exceeded")
 
-    with patch("app.rag.generator.genai") as mock_genai, patch(
-        "app.rag.generator.call_with_retry",
+    with patch("app.rag.generator.create_client"), patch(
+        "app.ai.gemini.call_with_retry",
         new=AsyncMock(side_effect=quota_error),
     ):
-        mock_genai.GenerativeModel.return_value = MagicMock()
         with pytest.raises(ExternalCallError):
             await generate_answer("What is a component?", [chunk])
 

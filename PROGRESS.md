@@ -6,7 +6,7 @@
 - **Live verification:** tutor citations, notes, quizzes, and planner dashboard LIVE-VERIFIED; full `smoke_features.py` rerun not repeated.
 - **Backend tests:** 202/202 passing (mocked/hermetic).
 - **Frontend:** `tsc --noEmit` and `npm run build` clean.
-- **Latest commit:** `test: Playwright end-to-end smoke tests`.
+- **Latest commit:** `refactor: migrate to google.genai`.
 - **Session:** 2026-11-01 page-aware chunking added; existing documents keep old chunks until retried.
 - **Last updated:** 2026-11-08
 
@@ -57,6 +57,7 @@ OCR uses Gemini vision through `settings.GEMINI_MODEL` (default `gemini-3.6-flas
 | FK cascades | LIVE-VERIFIED | Cascade deletes confirmed against live DB |
 | JWKS | LIVE-VERIFIED | Key fetched from configured JWKS endpoint |
 | Gemini text, vision, embedding | LIVE-VERIFIED | Text and vision passed; `gemini-embedding-001` returned 768 dims with `output_dimensionality=768` |
+| Gemini SDK migration | LIVE-VERIFIED | All Gemini access goes through `app/ai/gemini.py`: `create_client(api_key)` builds a `google.genai.Client` with no global configuration; text/vision use `GEMINI_MODEL` with the same prompts and temperatures through the existing `call_with_retry` timeout/retry wrapper; embeddings use the single `EMBEDDING_MODEL` with `output_dimensionality=768`, reject empty/all-zero vectors, and pad/truncate to `EMBEDDING_DIM`; `google.genai` 429/401/403/5xx map to the existing quota/auth/busy errors. Removed `google-generativeai`, pinned `google-genai==3.0.0`, updated mocks to the new client. `pytest -q` -> 202 passed in 39.51s; Playwright -> 11 passed (1.9m); live check: embedding dims=768, text `OK`, vision first 100 chars `3 operations / 1 push -> add something at the top. / 2 pop -> Remove the element`; no 429 |
 | Supabase login | LIVE-VERIFIED | Login succeeded |
 | End-to-end smoke test | PARTIAL | Batch 2 live smoke: PDF upload ready (3 pages, 2 chunks), tutor/notes/quizzes LIVE-VERIFIED, planner PARTIAL; cleanup rows/storage=0 and counts before=after in the tutor/notes/quizzes runs; one planner run left a chat session after a transient connection reset (manually cleaned). 2026-11-01 targeted `smoke_tutor.py`: 8-page PDF ready, tutor citation/insufficient/follow-up checks passed, planner dashboard HTTP 200 owner-scoped, cleanup rows/storage=0 and counts equal; full `smoke_features.py` not rerun. Logs: `logs/step10_features_retry*.log`, `logs/server_step10.err.log`, `logs/live_tutor_dashboard.log`. |
 | Tailwind 3 compatibility | UNIT-TESTED (mocked) | No v4-only utility matches remain; `tailwindcss 3.4.10` build exit 0; CSS contains card spacing, 3px ring, 2px blur, `has-`/`data-` variants |
@@ -124,7 +125,6 @@ The live DB already holds non-test data. Smoke tests may delete only what they c
 
 ### Follow-ups
 
-- Migrate `google.generativeai` to `google.genai`.
 - Retry `gemini-3.8-flash` later.
 - Remove remaining hardcoded embedding model IDs in tests (`test_jwks.py`, embedding literals in `test_ocr.py`).
 - Replace the per-process rate limiter with a shared store for multi-instance use.

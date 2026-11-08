@@ -1,6 +1,7 @@
 """Tests for OCR providers and flagging logic."""
 
 import pytest
+from google.genai import errors, types
 from unittest.mock import MagicMock, patch
 
 from app.ai.ocr import (
@@ -65,6 +66,21 @@ async def test_flag_needs_review_custom_min_length():
 
 # --- GeminiOcrProvider tests (mocked) ---
 
+
+def _gemini_client(response=None):
+    client = MagicMock()
+    if response is not None:
+        client.models.generate_content.return_value = response
+    return client
+
+
+def _api_error(error_cls, code, status):
+    return error_cls(
+        code,
+        {"error": {"code": code, "message": status.lower(), "status": status}},
+    )
+
+
 @pytest.mark.asyncio
 async def test_gemini_provider_requires_api_key():
     """Gemini provider raises when GEMINI_API_KEY is not configured."""
@@ -79,13 +95,10 @@ async def test_gemini_provider_transcribe_success():
     """Successful transcription returns OcrResult with text."""
     mock_response = MagicMock()
     mock_response.text = "Transcribed text here"
-    mock_response.candidates = [MagicMock(finish_reason=None)]
+    mock_response.candidates = [MagicMock(finish_reason=types.FinishReason.STOP)]
+    mock_client = _gemini_client(mock_response)
 
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = mock_response
-
-    with patch("app.ai.gemini.genai.configure"), \
-         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+    with patch("app.ai.gemini.create_client", return_value=mock_client), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "test-vision-model"
@@ -104,13 +117,10 @@ async def test_gemini_provider_transcribe_no_text():
     """When Gemini returns [NO_TEXT], result has empty text and LOW quality."""
     mock_response = MagicMock()
     mock_response.text = "[NO_TEXT]"
-    mock_response.candidates = [MagicMock(finish_reason=None)]
+    mock_response.candidates = [MagicMock(finish_reason=types.FinishReason.STOP)]
+    mock_client = _gemini_client(mock_response)
 
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = mock_response
-
-    with patch("app.ai.gemini.genai.configure"), \
-         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+    with patch("app.ai.gemini.create_client", return_value=mock_client), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "test-vision-model"
@@ -127,11 +137,10 @@ async def test_gemini_provider_transcribe_no_text():
 @pytest.mark.asyncio
 async def test_gemini_provider_transcribe_error_raises_busy():
     """When Gemini call fails, raise a typed busy error instead of empty text."""
-    mock_model = MagicMock()
-    mock_model.generate_content.side_effect = Exception("network error")
+    mock_client = _gemini_client()
+    mock_client.models.generate_content.side_effect = Exception("network error")
 
-    with patch("app.ai.gemini.genai.configure"), \
-         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+    with patch("app.ai.gemini.create_client", return_value=mock_client), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "test-vision-model"
@@ -144,12 +153,13 @@ async def test_gemini_provider_transcribe_error_raises_busy():
 
 @pytest.mark.asyncio
 async def test_gemini_provider_quota_error_is_typed():
-    """A 429/quota provider failure maps to OcrQuotaError."""
-    mock_model = MagicMock()
-    mock_model.generate_content.side_effect = Exception("429 ResourceExhausted: quota exceeded")
+    """A google.genai 429/RESOURCE_EXHAUSTED maps to OcrQuotaError."""
+    mock_client = _gemini_client()
+    mock_client.models.generate_content.side_effect = _api_error(
+        errors.ClientError, 429, "RESOURCE_EXHAUSTED"
+    )
 
-    with patch("app.ai.gemini.genai.configure"), \
-         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+    with patch("app.ai.gemini.create_client", return_value=mock_client), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "test-vision-model"
@@ -162,12 +172,13 @@ async def test_gemini_provider_quota_error_is_typed():
 
 @pytest.mark.asyncio
 async def test_gemini_provider_bad_key_error_is_typed():
-    """An API-key failure maps to OcrAuthError."""
-    mock_model = MagicMock()
-    mock_model.generate_content.side_effect = Exception("API key not valid")
+    """A google.genai 401/UNAUTHENTICATED failure maps to OcrAuthError."""
+    mock_client = _gemini_client()
+    mock_client.models.generate_content.side_effect = _api_error(
+        errors.ClientError, 401, "UNAUTHENTICATED"
+    )
 
-    with patch("app.ai.gemini.genai.configure"), \
-         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+    with patch("app.ai.gemini.create_client", return_value=mock_client), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "test-vision-model"
@@ -181,10 +192,10 @@ async def test_gemini_provider_bad_key_error_is_typed():
 @pytest.mark.asyncio
 async def test_gemini_provider_embed_texts_raises_on_failure():
     """Embedding failure raises instead of returning zero vectors."""
-    mock_model = MagicMock()
+    mock_client = _gemini_client()
+    mock_client.models.embed_content.side_effect = Exception("network error")
 
-    with patch("app.ai.gemini.genai.configure"), \
-         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+    with patch("app.ai.gemini.create_client", return_value=mock_client), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "test-vision-model"
@@ -193,18 +204,19 @@ async def test_gemini_provider_embed_texts_raises_on_failure():
         mock_settings.EMBEDDING_MODEL = "gemini-embedding-001"
         mock_settings.EMBEDDING_DIM = 768
         provider = GeminiOcrProvider()
-        with patch("app.ai.gemini.genai.embed_content", side_effect=Exception("network error")):
-            with pytest.raises(RuntimeError):
-                await provider.embed_texts(["hello world"])
+        with pytest.raises(RuntimeError):
+            await provider.embed_texts(["hello world"])
 
 
 @pytest.mark.asyncio
 async def test_gemini_provider_embed_texts_rejects_zero_vector():
     """An all-zero embedding response is rejected."""
-    mock_model = MagicMock()
+    mock_client = _gemini_client()
+    mock_client.models.embed_content.return_value = MagicMock(
+        embeddings=[MagicMock(values=[0.0] * 768)]
+    )
 
-    with patch("app.ai.gemini.genai.configure"), \
-         patch("app.ai.gemini.genai.GenerativeModel", return_value=mock_model), \
+    with patch("app.ai.gemini.create_client", return_value=mock_client), \
          patch("app.ai.gemini.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "test-vision-model"
@@ -213,12 +225,8 @@ async def test_gemini_provider_embed_texts_rejects_zero_vector():
         mock_settings.EMBEDDING_MODEL = "gemini-embedding-001"
         mock_settings.EMBEDDING_DIM = 768
         provider = GeminiOcrProvider()
-        with patch(
-            "app.ai.gemini.genai.embed_content",
-            return_value={"embedding": [0.0] * 768},
-        ):
-            with pytest.raises(RuntimeError, match="all zeros"):
-                await provider.embed_texts(["hello world"])
+        with pytest.raises(RuntimeError, match="all zeros"):
+            await provider.embed_texts(["hello world"])
 
 
 # --- TesseractOcrProvider tests ---

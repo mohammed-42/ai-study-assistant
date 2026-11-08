@@ -111,17 +111,15 @@ class TestGeminiEmbeddingModel:
     def test_embedding_dim_compatible_with_gemini_embedding_001(self):
         """EMBEDDING_DIM=768 must be supported via output_dimensionality param."""
         from app.core.config import get_settings_instance
-        import inspect
-        import google.generativeai as genai
+        from google.genai import types
 
         s = get_settings_instance()
         dim = s.EMBEDDING_DIM
         assert dim == 768, f"Expected EMBEDDING_DIM=768 for pgvector column compat, got {dim}"
 
-        # Verify gemini-embedding-001 supports output_dimensionality param
-        sig = inspect.signature(genai.embed_content)
-        assert "output_dimensionality" in sig.parameters, (
-            "genai.embed_content missing output_dimensionality param — SDK too old"
+        # Verify google.genai supports output_dimensionality on embeddings
+        assert "output_dimensionality" in types.EmbedContentConfig.model_fields, (
+            "google.genai EmbedContentConfig missing output_dimensionality — SDK too old"
         )
         # Confirm the parameter accepts 768 (smoke check, no network)
         # Full live validation done manually: gemini-embedding-001 + output_dimensionality=768 → dim=768 ✓
