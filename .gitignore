@@ -61,6 +61,7 @@ alembic/versions/*.py
 # except the head migration we ship
 
 # Misc
+*.db
 *.tmp
 *.bak
 backend/samples/

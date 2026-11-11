@@ -15,7 +15,8 @@ async def lifespan(app: FastAPI):
     if not s.DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not set — cannot start")
     validate_runtime_config()
-    await init_db()
+    if not s.is_production:
+        await init_db()
     yield
 
 
